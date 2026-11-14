@@ -1379,6 +1379,15 @@
         els.previewScroller.scrollTo({ top: 0, left: 0, behavior: "smooth" });
       }
 
+      // 「適合尺寸」按鈕：將圖片寬度縮放到剛好填滿預覽外框（可放大，上限 600%）。
+      function fitToWidth() {
+        if (!state.items.length) return;
+        const cw = els.previewScroller.clientWidth - 44;
+        if (cw <= 0) return;
+        setZoom(cw / els.previewCanvas.width);
+        els.previewScroller.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }
+
       function gridBoundaries() {
         const { cols, rows } = getGridCounts();
         state.xRatios = sanitizeRatios(state.xRatios, cols);
@@ -1840,7 +1849,7 @@
       // Zoom controls
       els.zoomIn.addEventListener("click", () => setZoom(state.zoom * 1.15));
       els.zoomOut.addEventListener("click", () => setZoom(state.zoom / 1.15));
-      els.fitBtn.addEventListener("click", fitToView);
+      els.fitBtn.addEventListener("click", fitToWidth);
       els.zoomRange.addEventListener("input", () => {
         setZoom(Number(els.zoomRange.value) / 100);
       });
