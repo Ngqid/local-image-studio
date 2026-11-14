@@ -1,0 +1,1898 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image Studio</title>
+  <!-- Image Studio v4.3｜GitHub Pages 單檔版 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <style>
+    :root {
+      --ink: #3f4642;
+      --muted: #6f7772;
+      --line: #d8d9d3;
+      --paper: #f6f4ef;
+      --panel: #fbfaf7;
+      --sage: #a7b0a1;
+      --sage-dark: #7f8b79;
+      --rose: #c6ada7;
+      --stone: #b8b1a7;
+      --blue: #aab8bd;
+      --focus: #798779;
+      --danger: #9a665f;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(167,176,161,.16), transparent 32rem),
+        radial-gradient(circle at 100% 10%, rgba(198,173,167,.14), transparent 30rem),
+        var(--paper);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang TC",
+        "Noto Sans TC", "Segoe UI", sans-serif;
+    }
+
+    button, input, select { font: inherit; }
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 3px solid rgba(121,135,121,.25);
+      outline-offset: 2px;
+    }
+
+    .glass {
+      background: rgba(251,250,247,.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(216,217,211,.95);
+      box-shadow: 0 14px 40px rgba(63,70,66,.08);
+    }
+
+    .card {
+      background: rgba(255,255,255,.68);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+    }
+
+    .label {
+      display: block;
+      margin-bottom: 7px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .02em;
+      color: var(--muted);
+    }
+
+    .field, .select {
+      width: 100%;
+      min-height: 42px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,.9);
+      padding: 8px 11px;
+      color: var(--ink);
+    }
+
+    .field[type="number"] { appearance: textfield; }
+    .field::-webkit-inner-spin-button,
+    .field::-webkit-outer-spin-button { opacity: .6; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 42px;
+      padding: 9px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--ink);
+      font-weight: 700;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .btn:hover { background: #f3f1eb; border-color: #c8cac2; }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary {
+      color: #fff;
+      border-color: var(--sage-dark);
+      background: var(--sage-dark);
+    }
+    .btn.primary:hover { background: #6f7c69; }
+    .btn.primary:disabled { opacity: .5; cursor: not-allowed; }
+    .btn.ghost { background: transparent; }
+    .btn.small { min-height: 34px; padding: 5px 10px; font-size: 12px; }
+
+    .btn.line-mode-active {
+      background: #e7ebe3;
+      border-color: var(--sage-dark);
+      color: #53604f;
+      box-shadow: inset 0 0 0 1px rgba(127,139,121,.15);
+    }
+
+    #stage.add-line-x { cursor: crosshair; }
+    #stage.add-line-y { cursor: crosshair; }
+
+    .icon-btn {
+      width: 38px;
+      min-width: 38px;
+      height: 38px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: rgba(255,255,255,.92);
+      display: inline-grid;
+      place-items: center;
+      font-weight: 900;
+      color: var(--ink);
+    }
+
+    #dropzone {
+      border: 1.5px dashed #b9bdb4;
+      background: linear-gradient(135deg, rgba(167,176,161,.08), rgba(198,173,167,.05));
+      transition: .16s ease;
+    }
+
+    #dropzone.dragover {
+      border-color: var(--sage-dark);
+      background: rgba(167,176,161,.18);
+      transform: translateY(-1px);
+    }
+
+    .checker {
+      background-color: #ecebe7;
+      background-image:
+        linear-gradient(45deg, #d8d7d2 25%, transparent 25%),
+        linear-gradient(-45deg, #d8d7d2 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #d8d7d2 75%),
+        linear-gradient(-45deg, transparent 75%, #d8d7d2 75%);
+      background-size: 22px 22px;
+      background-position: 0 0, 0 11px, 11px -11px, -11px 0;
+    }
+
+    #previewScroller {
+      position: relative;
+      min-height: 520px;
+      max-height: 72vh;
+      overflow: auto;
+      overscroll-behavior: contain;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+    }
+
+    #stage {
+      position: relative;
+      margin: 22px auto;
+      transform-origin: top left;
+      box-shadow: 0 8px 30px rgba(63,70,66,.16);
+      background: #fff;
+    }
+
+    #previewCanvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: auto;
+    }
+
+    #gridOverlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .grid-line {
+      position: absolute;
+      z-index: 20;
+      pointer-events: auto;
+      touch-action: none;
+    }
+
+    .grid-line.vertical {
+      top: 0;
+      bottom: 0;
+      width: 18px;
+      margin-left: -9px;
+      cursor: col-resize;
+    }
+
+    .grid-line.horizontal {
+      left: 0;
+      right: 0;
+      height: 18px;
+      margin-top: -9px;
+      cursor: row-resize;
+    }
+
+    .grid-line::after {
+      content: "";
+      position: absolute;
+      background: rgba(71,86,77,.92);
+      box-shadow: 0 0 0 1px rgba(255,255,255,.55);
+    }
+
+    .grid-line.vertical::after {
+      width: 2px;
+      top: 0;
+      bottom: 0;
+      left: 8px;
+    }
+
+    .grid-line.horizontal::after {
+      height: 2px;
+      left: 0;
+      right: 0;
+      top: 8px;
+    }
+
+    .grid-line.dragging::after {
+      background: #2f3d34;
+      box-shadow: 0 0 0 2px rgba(255,255,255,.82);
+    }
+
+    .slice-label {
+      position: absolute;
+      z-index: 10;
+      min-width: 30px;
+      min-height: 24px;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      padding: 3px 7px;
+      border-radius: 999px;
+      color: #fff;
+      background: rgba(63,70,66,.72);
+      border: 1px solid rgba(255,255,255,.7);
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 2px 8px rgba(0,0,0,.12);
+    }
+
+    .slice-row {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 48px;
+      padding: 9px 10px;
+      border-bottom: 1px solid #ecebe6;
+    }
+
+    .slice-row:last-child { border-bottom: 0; }
+
+    .tiny {
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--muted);
+    }
+
+    .kbd {
+      display: inline-block;
+      padding: 1px 6px;
+      border: 1px solid #d3d4cf;
+      border-bottom-width: 2px;
+      border-radius: 6px;
+      background: #fff;
+      color: #626a65;
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .status-ok { color: #62735d; }
+    .status-warn { color: #8d655e; }
+
+    /* Thumbnail sorting panel: mouse dragging, touch handle dragging. */
+    .thumb-list {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      -webkit-overflow-scrolling: touch;
+      max-height: 610px;
+      padding: 4px 3px 10px 2px;
+    }
+    .thumb-item {
+      position: relative;
+      display: grid;
+      grid-template-columns: 24px minmax(0, 1fr) 28px;
+      grid-template-areas: "number preview grip" "details details details";
+      align-items: center;
+      column-gap: 8px;
+      row-gap: 10px;
+      padding: 10px 9px;
+      min-width: 0;
+      border-radius: 13px;
+      border: 1px solid #e0e1da;
+      background: rgba(255,255,255,.88);
+      user-select: none;
+      -webkit-user-select: none;
+      cursor: grab;
+      transition: border-color .13s, background .13s, opacity .13s;
+    }
+    .thumb-item:hover { border-color: #b2beb0; background: #fff; }
+    .thumb-item.is-dragging { opacity: .48; border-style: dashed; cursor: grabbing; }
+    .thumb-item.drop-before::before,
+    .thumb-item.drop-after::after {
+      position: absolute;
+      z-index: 3;
+      content: '';
+      left: 3px;
+      right: 3px;
+      height: 3px;
+      border-radius: 3px;
+      background: var(--sage-dark);
+      pointer-events: none;
+    }
+    .thumb-item.drop-before::before { top: -7px; }
+    .thumb-item.drop-after::after { bottom: -7px; }
+    .thumb-num {
+      grid-area: number;
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 900;
+      color: #fff;
+      background: var(--sage-dark);
+    }
+    .thumb-preview {
+      grid-area: preview;
+      justify-self: center;
+      display: block;
+      width: 100%;
+      max-width: 112px;
+      height: 84px;
+      min-width: 0;
+      border: 1px solid #ddded8;
+      border-radius: 8px;
+      object-fit: contain;
+      background: repeating-conic-gradient(#ecece8 0% 25%, #f8f8f5 0% 50%) 0 0 / 12px 12px;
+    }
+    .thumb-details {
+      grid-area: details;
+      display: block;
+      width: 100%;
+      min-width: 0;
+      max-width: 100%;
+      padding-top: 8px;
+      border-top: 1px solid #e9ebe5;
+      text-align: left;
+    }
+    .thumb-title {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      font-size: 12px;
+      font-weight: 750;
+      line-height: 1.55;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: anywhere;
+    }
+    .thumb-grip {
+      grid-area: grip;
+      display: grid;
+      place-items: center;
+      justify-self: end;
+      align-self: center;
+      width: 28px;
+      height: 44px;
+      border: 0;
+      background: transparent;
+      color: #79857a;
+      cursor: grab;
+      font-size: 19px;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .thumb-grip:active { cursor: grabbing; }
+    .thumb-grip:focus-visible { border-radius: 5px; }
+
+    @media (max-width: 767px) {
+      .thumb-list { max-height: 310px; }
+      .thumb-item { grid-template-columns: 26px minmax(0, 1fr) 44px; }
+      .thumb-preview { max-width: 130px; height: 98px; }
+      .thumb-grip { width: 44px; height: 48px; }
+    }
+
+    @media (max-width: 1023px) {
+      #previewScroller { min-height: 430px; max-height: 60vh; }
+    }
+
+    @media (max-width: 640px) {
+      body { background: var(--paper); }
+      .mobile-tight { padding-left: 12px !important; padding-right: 12px !important; }
+      #previewScroller { min-height: 360px; max-height: 58vh; }
+      #stage { margin: 14px auto; }
+      .btn { min-height: 44px; }
+      .slice-row { grid-template-columns: auto 1fr; }
+      .slice-row .slice-size { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+<main class="max-w-[1680px] mx-auto px-4 sm:px-6 py-5 sm:py-8 mobile-tight">
+    <header class="mb-5 sm:mb-7">
+      <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <div class="text-xs font-extrabold tracking-[0.16em] uppercase text-[#7f8b79] mb-2">Local Image Utility</div>
+          <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Image Studio</h1>
+          <p class="mt-2 text-sm text-[#6f7772]">圖片擴充、拼接、自由切圖與 ZIP 匯出。所有圖片只在你的瀏覽器本機處理。</p>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-[#6f7772]">
+          <span class="inline-flex h-2.5 w-2.5 rounded-full bg-[#87947f]"></span>
+          無後端・不自動上傳圖片
+        </div>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 xl:grid-cols-[330px_minmax(0,1fr)_340px] gap-4">
+      <!-- Left controls -->
+      <aside class="space-y-4">
+        <section class="glass rounded-[22px] p-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="font-extrabold">1. 上傳與拼接</h2>
+            <button id="clearBtn" class="text-xs font-bold text-[#8d655e] hover:underline" type="button">清除全部</button>
+          </div>
+
+          <div id="dropzone" class="rounded-2xl p-5 text-center cursor-pointer" tabindex="0" role="button" aria-label="上傳圖片">
+            <input id="fileInput" class="hidden" type="file" accept="image/*" multiple />
+            <div class="mx-auto w-11 h-11 rounded-2xl bg-white/80 border border-[#dedfd9] grid place-items-center mb-3 text-xl">＋</div>
+            <div id="dropTitle" class="font-extrabold text-sm">拖曳圖片到這裡</div>
+            <div id="dropSub" class="tiny mt-1">或點擊選擇多張圖片</div>
+          </div>
+
+          <button id="addMoreBtn" class="btn primary w-full mt-3 hidden" type="button">＋ 新增圖片</button>
+
+          <div id="fileSummary" class="mt-3 tiny">尚未載入圖片</div>
+
+          <div id="mergeControls" class="mt-4 hidden">
+            <label class="label" for="mergeMode">多圖拼接方向</label>
+            <select id="mergeMode" class="select">
+              <option value="vertical">垂直拼接長圖</option>
+              <option value="horizontal">水平拼接</option>
+            </select>
+            <div class="tiny mt-2">拼接順序以工作區旁的縮圖排列為準，可拖曳改變先後。</div>
+          </div>
+        </section>
+
+        <section class="glass rounded-[22px] p-4">
+          <h2 class="font-extrabold mb-3">2. 版面擴充</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <label>
+              <span class="label">上方 px</span>
+              <input id="padTop" class="field" type="number" min="0" max="20000" step="1" value="0" inputmode="numeric" />
+            </label>
+            <label>
+              <span class="label">下方 px</span>
+              <input id="padBottom" class="field" type="number" min="0" max="20000" step="1" value="0" inputmode="numeric" />
+            </label>
+            <label>
+              <span class="label">左側 px</span>
+              <input id="padLeft" class="field" type="number" min="0" max="20000" step="1" value="0" inputmode="numeric" />
+            </label>
+            <label>
+              <span class="label">右側 px</span>
+              <input id="padRight" class="field" type="number" min="0" max="20000" step="1" value="0" inputmode="numeric" />
+            </label>
+          </div>
+
+          <label class="mt-3 block">
+            <span class="label">留白背景色</span>
+            <div class="flex items-center gap-2">
+              <input id="bgColor" type="color" value="#ffffff" class="h-11 w-14 rounded-xl border border-[#d8d9d3] bg-white p-1" />
+              <input id="bgText" class="field uppercase" type="text" value="#FFFFFF" maxlength="7" aria-label="背景色 HEX" />
+            </div>
+          </label>
+        </section>
+
+        <section class="glass rounded-[22px] p-4">
+          <h2 class="font-extrabold mb-3">3. 網格切圖</h2>
+          <div class="grid grid-cols-2 gap-3">
+            <label>
+              <span class="label">欄數 Columns</span>
+              <input id="cols" class="field" type="number" min="1" max="20" step="1" value="1" inputmode="numeric" />
+            </label>
+            <label>
+              <span class="label">列數 Rows</span>
+              <input id="rows" class="field" type="number" min="1" max="20" step="1" value="1" inputmode="numeric" />
+            </label>
+          </div>
+          <p class="tiny mt-3">網格線可直接拖曳。位置以比例儲存，所以預覽縮放後不會跑位。</p>
+
+          <div class="mt-4 pt-4 border-t border-[#e2e2dc]">
+            <div class="label">自由新增格線</div>
+            <div class="grid grid-cols-2 gap-2">
+              <button id="addVerticalLineBtn" class="btn" type="button">＋ 垂直格線</button>
+              <button id="addHorizontalLineBtn" class="btn" type="button">＋ 水平格線</button>
+            </div>
+            <button id="cancelAddLineBtn" class="btn ghost w-full mt-2 hidden" type="button">取消新增格線</button>
+            <p id="addLineHint" class="tiny mt-2">選擇方向後，直接點擊／觸碰預覽圖片任意位置新增格線。</p>
+          </div>
+        </section>
+
+        <section class="glass rounded-[22px] p-4">
+          <h2 class="font-extrabold mb-3">4. 匯出設定</h2>
+
+          <label class="block" for="exportFormat">
+            <span class="label">儲存格式</span>
+            <select id="exportFormat" class="select" aria-describedby="exportFormatHint">
+              <option value="jpg" selected>JPG · 壓縮格式</option>
+              <option value="png">PNG · 無損格式</option>
+            </select>
+          </label>
+          <p id="exportFormatHint" class="tiny mt-2" aria-live="polite">JPG 沿用原本的品質與最大寬度設定。</p>
+
+          <div id="jpgQualityControls" class="mt-4">
+            <label>
+              <div class="flex items-center justify-between mb-1">
+                <span class="label !mb-0">JPG 品質</span>
+                <strong id="qualityLabel" class="text-sm">90%</strong>
+              </div>
+              <input id="quality" class="w-full accent-[#7f8b79]" type="range" min="10" max="100" step="5" value="90" />
+            </label>
+          </div>
+
+          <div id="pngSizeControls" class="hidden mt-4 rounded-xl border border-[#dbe0d8] bg-[#f0f3ee] p-3">
+            <label class="flex items-start gap-2 text-sm font-bold cursor-pointer" for="preservePngSize">
+              <input id="preservePngSize" type="checkbox" class="accent-[#7f8b79] mt-1" checked />
+              <span>PNG 保留原始切圖尺寸（不縮圖）</span>
+            </label>
+            <p class="tiny mt-2">勾選時不套用最大寬度限制，以完整像素尺寸匯出 PNG；取消勾選後可使用下方寬度上限。</p>
+          </div>
+
+          <div id="maxWidthControls" class="mt-4">
+            <div class="flex items-center justify-between gap-3 mb-2">
+              <label class="label !mb-0" for="maxWidth">單張切圖最大寬度</label>
+              <span class="text-xs font-bold text-[#7f8b79]" id="maxWidthLabel">1080 px</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <input id="maxWidthRange" type="range" min="1" max="5000" step="1" value="1080"
+                class="w-full accent-[#7f8b79] min-w-0" aria-label="單張切圖最大寬度拉桿" />
+              <input id="maxWidth" class="field !w-[96px] !min-w-[96px]" type="number" min="1" max="5000"
+                step="1" value="1080" inputmode="numeric" aria-label="最大寬度 px" />
+            </div>
+            <p id="maxWidthHint" class="tiny mt-2">只縮小超過上限的切圖，不會放大較小圖片；輸入數值或移動拉桿都會即時更新尺寸。</p>
+          </div>
+
+          <label class="mt-4 block" for="filenamePrefix">
+            <span class="label">輸出檔名前綴</span>
+            <input id="filenamePrefix" class="field" type="text" value="" maxlength="120"
+              placeholder="留空則使用原圖檔名" autocomplete="off" spellcheck="false" />
+          </label>
+          <p class="tiny mt-2" id="filenameHint">留空時，依原圖檔名自動命名；可選擇自行輸入前綴。</p>
+
+          <button id="downloadBtn" class="btn primary w-full mt-4" type="button" disabled>
+            <span>打包下載 ZIP</span>
+          </button>
+          <div id="exportStatus" class="tiny mt-3">請先載入圖片。</div>
+        </section>
+      </aside>
+
+      <!-- Preview and source image strip -->
+      <div class="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_210px] gap-4 min-w-0 items-start">
+      <!-- Center preview -->
+      <section class="glass rounded-[22px] p-3 sm:p-4 min-w-0">
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <div>
+            <h2 class="font-extrabold">預覽與切圖線</h2>
+            <div id="canvasMeta" class="tiny mt-1">尚未載入圖片</div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="zoomOut" class="icon-btn" type="button" aria-label="縮小">−</button>
+            <button id="fitBtn" class="btn !min-h-[38px] !py-1.5" type="button">適合尺寸</button>
+            <button id="zoomIn" class="icon-btn" type="button" aria-label="放大">＋</button>
+            <span id="zoomLabel" class="text-xs font-extrabold min-w-[50px] text-right" aria-live="off">100%</span>
+          </div>
+        </div>
+        <div class="flex items-center gap-3 mb-3 rounded-xl border border-[#e2e2dc] bg-white/60 px-3 py-2">
+          <label for="zoomRange" class="text-xs font-bold text-[#6f7772] whitespace-nowrap">工作區縮放</label>
+          <input id="zoomRange" type="range" min="5" max="600" step="1" value="100"
+            class="w-full min-w-0 accent-[#7f8b79]" aria-label="工作區縮放比例" />
+          <span class="text-[11px] text-[#6f7772] whitespace-nowrap">5–600%</span>
+        </div>
+
+        <div id="previewScroller" class="checker">
+          <div id="emptyPreview" class="absolute inset-0 grid place-items-center p-8 text-center">
+            <div>
+              <div class="text-4xl opacity-35 mb-3">▧</div>
+              <div class="font-extrabold text-sm">圖片預覽會顯示在這裡</div>
+              <div class="tiny mt-2">支援 <span class="kbd">+</span> / <span class="kbd">−</span> / <span class="kbd">Ctrl+0</span><br>
+                也可使用 <span class="kbd">Ctrl/Cmd</span> + 滾輪／觸控板縮放
+              </div>
+            </div>
+          </div>
+
+          <div id="stage" class="hidden">
+            <canvas id="previewCanvas"></canvas>
+            <div id="gridOverlay" aria-hidden="true"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Image thumbnails / source order: filename below each image -->
+      <aside class="glass rounded-[22px] p-3 sm:p-4 min-w-0">
+        <div class="flex items-start justify-between gap-2 mb-3">
+          <div>
+            <h2 class="font-extrabold text-sm">圖片縮圖與排序</h2>
+            <p id="thumbCount" class="tiny mt-1" aria-live="polite">尚未上傳圖片</p>
+          </div>
+          <span class="text-[10px] px-2 py-1 rounded-lg bg-[#e7ebe3] text-[#687866] whitespace-nowrap font-bold">來源順序</span>
+        </div>
+        <button id="thumbAddBtn" class="btn small w-full mb-3 hidden" type="button">＋ 新增圖片</button>
+        <label for="imageSortMode" class="label">排序方式</label>
+        <select id="imageSortMode" class="select !text-xs !min-h-[38px] mb-3" disabled>
+          <option value="filename" selected>檔名排序（預設）</option>
+          <option value="upload">上傳順序</option>
+          <option value="manual">手動排序</option>
+        </select>
+        <ol id="thumbList" class="thumb-list" aria-label="圖片拼接順序">
+          <li class="tiny text-center p-4 border border-dashed border-[#d8d9d3] rounded-xl">上傳圖片後會在此顯示縮圖。</li>
+        </ol>
+        <p class="tiny mt-3">依序號拼接。電腦可拖動縮圖，手機請按住 <strong>⠿</strong> 拖曳；拖曳把手也支援方向鍵上下移動。</p>
+      </aside>
+      </div>
+
+      <!-- Right slices -->
+      <aside class="glass rounded-[22px] p-4 min-w-0">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <h2 class="font-extrabold">切圖尺寸</h2>
+            <p class="tiny mt-1">取消勾選即可略過不需要的碎圖。</p>
+          </div>
+          <label class="text-xs font-bold whitespace-nowrap">
+            <input id="selectAll" type="checkbox" class="accent-[#7f8b79]" checked disabled />
+            全選
+          </label>
+        </div>
+
+        <div id="sliceStats" class="card overflow-hidden">
+          <div class="p-4 tiny">載入圖片後會即時計算每張切圖尺寸。</div>
+        </div>
+      </aside>
+    </div>
+
+    <footer class="mt-5 text-center tiny">
+      圖片處理、切圖與 ZIP 建立皆在目前瀏覽器分頁內完成。
+    </footer>
+  </main>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const $ = (id) => document.getElementById(id);
+      const els = {
+        dropzone: $("dropzone"),
+        dropTitle: $("dropTitle"),
+        dropSub: $("dropSub"),
+        fileInput: $("fileInput"),
+        addMoreBtn: $("addMoreBtn"),
+        thumbAddBtn: $("thumbAddBtn"),
+        fileSummary: $("fileSummary"),
+        mergeControls: $("mergeControls"),
+        mergeMode: $("mergeMode"),
+        clearBtn: $("clearBtn"),
+        imageSortMode: $("imageSortMode"),
+        thumbList: $("thumbList"),
+        thumbCount: $("thumbCount"),
+
+        padTop: $("padTop"),
+        padBottom: $("padBottom"),
+        padLeft: $("padLeft"),
+        padRight: $("padRight"),
+        bgColor: $("bgColor"),
+        bgText: $("bgText"),
+
+        cols: $("cols"),
+        rows: $("rows"),
+        addVerticalLineBtn: $("addVerticalLineBtn"),
+        addHorizontalLineBtn: $("addHorizontalLineBtn"),
+        cancelAddLineBtn: $("cancelAddLineBtn"),
+        addLineHint: $("addLineHint"),
+
+        exportFormat: $("exportFormat"),
+        exportFormatHint: $("exportFormatHint"),
+        jpgQualityControls: $("jpgQualityControls"),
+        pngSizeControls: $("pngSizeControls"),
+        preservePngSize: $("preservePngSize"),
+        maxWidthControls: $("maxWidthControls"),
+        maxWidthHint: $("maxWidthHint"),
+        quality: $("quality"),
+        qualityLabel: $("qualityLabel"),
+        maxWidth: $("maxWidth"),
+        maxWidthRange: $("maxWidthRange"),
+        maxWidthLabel: $("maxWidthLabel"),
+        filenamePrefix: $("filenamePrefix"),
+        filenameHint: $("filenameHint"),
+        downloadBtn: $("downloadBtn"),
+        exportStatus: $("exportStatus"),
+
+        previewScroller: $("previewScroller"),
+        emptyPreview: $("emptyPreview"),
+        stage: $("stage"),
+        previewCanvas: $("previewCanvas"),
+        gridOverlay: $("gridOverlay"),
+        canvasMeta: $("canvasMeta"),
+
+        zoomOut: $("zoomOut"),
+        zoomIn: $("zoomIn"),
+        fitBtn: $("fitBtn"),
+        zoomLabel: $("zoomLabel"),
+        zoomRange: $("zoomRange"),
+
+        sliceStats: $("sliceStats"),
+        selectAll: $("selectAll"),
+      };
+
+      const ctx = els.previewCanvas.getContext("2d", { alpha: false });
+
+      const state = {
+        items: [],                    // { file, img, width, height, uploadIndex, thumbnail }
+        sortMode: "filename",
+        thumbDrag: null,
+        uploadCounter: 0,             // 單調遞增，作為「上傳順序」
+        generation: 0,                // 清除全部時 +1，用來作廢尚在讀取中的圖片
+        mergedCanvas: document.createElement("canvas"),
+        xRatios: [],
+        yRatios: [],
+        selected: new Set([0]),
+        zoom: 1,
+        minZoom: 0.05,
+        maxZoom: 6,
+        dragging: null,
+        addLineMode: null,            // "x" | "y" | null
+        renderToken: 0,
+        panelRaf: 0,
+      };
+
+      const naturalSort = new Intl.Collator(undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+
+      function clamp(n, min, max) {
+        return Math.min(max, Math.max(min, n));
+      }
+
+      function intValue(el, fallback = 0, min = 0, max = 20000) {
+        const n = Math.round(Number(el.value));
+        if (!Number.isFinite(n)) return fallback;
+        return clamp(n, min, max);
+      }
+
+      function getGridCounts() {
+        return {
+          cols: intValue(els.cols, 1, 1, 20),
+          rows: intValue(els.rows, 1, 1, 20),
+        };
+      }
+
+      function getPadding() {
+        return {
+          top: intValue(els.padTop),
+          bottom: intValue(els.padBottom),
+          left: intValue(els.padLeft),
+          right: intValue(els.padRight),
+        };
+      }
+
+      function getMaxWidth() {
+        const n = Math.round(Number(els.maxWidth.value));
+        return Number.isFinite(n) && n > 0 ? clamp(n, 1, 5000) : 1080;
+      }
+
+      function isPngExport() {
+        return els.exportFormat.value === "png";
+      }
+
+      function exportExtension() {
+        return isPngExport() ? "png" : "jpg";
+      }
+
+      function getEffectiveMaxWidth() {
+        return isPngExport() && els.preservePngSize.checked ? null : getMaxWidth();
+      }
+
+      function syncExportFormatUI() {
+        const png = isPngExport();
+        const preserve = png && els.preservePngSize.checked;
+        els.jpgQualityControls.classList.toggle("hidden", png);
+        els.pngSizeControls.classList.toggle("hidden", !png);
+        els.quality.disabled = png;
+        els.maxWidth.disabled = preserve;
+        els.maxWidthRange.disabled = preserve;
+        els.maxWidthControls.style.opacity = preserve ? "0.48" : "1";
+        els.maxWidthHint.textContent = preserve
+          ? `PNG 原始尺寸模式已啟用：暫不套用 ${getMaxWidth().toLocaleString()} px 上限，右側顯示實際匯出尺寸。`
+          : "只縮小超過上限的切圖，不會放大較小圖片；輸入數值或移動拉桿都會即時更新尺寸。";
+        els.exportFormatHint.textContent = png
+          ? "PNG 採無損編碼、不使用 JPG 品質壓縮；可保留切圖原始像素尺寸（不會修復來源圖片既有的壓縮失真）。"
+          : "JPG 沿用原本的品質與最大寬度設定。";
+        renderSliceStats();
+        updateFilenameHint();
+      }
+
+      function updateMaxWidth(value, commit = true) {
+        const parsed = Math.round(Number(value));
+        if (!Number.isFinite(parsed) || parsed < 1) {
+          if (commit) updateMaxWidth(1080, false);
+          return;
+        }
+        const safe = clamp(parsed, 1, 5000);
+        els.maxWidth.value = String(safe);
+        els.maxWidthRange.value = String(clamp(safe, 1, 5000));
+        els.maxWidthLabel.textContent = `${safe.toLocaleString()} px`;
+        renderSliceStats();
+      }
+
+      function safeFilenamePrefix(value) {
+        const cleaned = String(value || "")
+          .replace(/[\/\\:*?"<>|\x00-\x1F]/g, "-")
+          .replace(/^[.\s]+|[.\s]+$/g, "")
+          .trim()
+          .slice(0, 100);
+        return /^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(cleaned)
+          ? `_${cleaned}` : cleaned;
+      }
+
+      // 前綴欄位預設留空。多圖拼接使用目前排列第一張的原圖檔名。
+      function getOutputPrefix() {
+        const custom = safeFilenamePrefix(els.filenamePrefix.value);
+        if (custom) return custom;
+        const firstName = state.items[0]?.file?.name || "";
+        return safeFilenamePrefix(firstName.replace(/\.[^.]+$/, "")) || "未命名";
+      }
+
+      function updateFilenameHint() {
+        if (!state.items.length && !els.filenamePrefix.value.trim()) {
+          els.filenameHint.textContent = "留空時，將依原圖檔名自動命名；上傳後顯示實際檔名。";
+          return;
+        }
+        const base = getOutputPrefix();
+        const method = els.filenamePrefix.value.trim() ? "自訂" : "原圖檔名";
+        const ext = exportExtension();
+        els.filenameHint.textContent = `${method}：${base}-1.${ext}、${base}-2.${ext}；ZIP：${base}-切圖.zip`;
+      }
+
+      function equalRatios(count) {
+        if (count <= 1) return [];
+        return Array.from({ length: count - 1 }, (_, i) => (i + 1) / count);
+      }
+
+      function sanitizeRatios(ratios, count) {
+        const needed = Math.max(0, count - 1);
+        if (ratios.length !== needed) return equalRatios(count);
+        const sorted = [...ratios].sort((a,b) => a-b);
+        const out = [];
+        for (let i = 0; i < sorted.length; i++) {
+          const prev = i === 0 ? 0 : out[i - 1];
+          const remaining = sorted.length - i;
+          const min = prev + 0.001;
+          const max = 1 - remaining * 0.001;
+          out.push(clamp(sorted[i], min, max));
+        }
+        return out;
+      }
+
+      function setAddLineMode(axis) {
+        state.addLineMode = axis;
+
+        els.addVerticalLineBtn.classList.toggle("line-mode-active", axis === "x");
+        els.addHorizontalLineBtn.classList.toggle("line-mode-active", axis === "y");
+        els.cancelAddLineBtn.classList.toggle("hidden", !axis);
+
+        els.stage.classList.toggle("add-line-x", axis === "x");
+        els.stage.classList.toggle("add-line-y", axis === "y");
+
+        if (axis === "x") {
+          els.addLineHint.textContent = "新增垂直格線模式：點擊／觸碰圖片任意位置放入格線。";
+        } else if (axis === "y") {
+          els.addLineHint.textContent = "新增水平格線模式：點擊／觸碰圖片任意位置放入格線。";
+        } else {
+          els.addLineHint.textContent = "選擇方向後，直接點擊／觸碰預覽圖片任意位置新增格線。";
+        }
+      }
+
+      function addGridLineAt(axis, ratio) {
+        if (!state.items.length) return false;
+
+        const arr = axis === "x" ? state.xRatios : state.yRatios;
+        const dimension = axis === "x" ? els.previewCanvas.width : els.previewCanvas.height;
+
+        // 至少保留約 2px 的距離，避免與邊界或既有格線重疊。
+        const minGap = Math.max(0.001, Math.min(0.02, 2 / Math.max(2, dimension)));
+        ratio = clamp(ratio, minGap, 1 - minGap);
+
+        for (const existing of arr) {
+          if (Math.abs(existing - ratio) < minGap) {
+            setStatus("這個位置太靠近既有格線，請換一個位置新增。", "warn");
+            return false;
+          }
+        }
+
+        arr.push(ratio);
+        arr.sort((a, b) => a - b);
+
+        if (axis === "x") {
+          els.cols.value = String(arr.length + 1);
+        } else {
+          els.rows.value = String(arr.length + 1);
+        }
+
+        resetSelections();
+        renderGridOverlay();
+        renderSliceStats();
+        setStatus(`已新增${axis === "x" ? "垂直" : "水平"}格線。`, "ok");
+        return true;
+      }
+
+      function placeFreeGridLine(e) {
+        if (!state.addLineMode || !state.items.length || state.dragging) return;
+
+        // 點在既有格線上時交由格線拖曳處理，不新增。
+        if (e.target.closest?.(".grid-line")) return;
+
+        e.preventDefault();
+        const rect = els.stage.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+
+        const ratio = state.addLineMode === "x"
+          ? (e.clientX - rect.left) / rect.width
+          : (e.clientY - rect.top) / rect.height;
+
+        addGridLineAt(state.addLineMode, ratio);
+      }
+
+      function resetSelections() {
+        const { cols, rows } = getGridCounts();
+        state.selected = new Set(Array.from({ length: cols * rows }, (_, i) => i));
+        els.selectAll.checked = true;
+      }
+
+      function setStatus(text, tone = "") {
+        els.exportStatus.className = "tiny mt-3";
+        if (tone === "ok") els.exportStatus.classList.add("status-ok");
+        if (tone === "warn") els.exportStatus.classList.add("status-warn");
+        els.exportStatus.textContent = text;
+      }
+
+      async function fileToImage(file, uploadIndex) {
+        const url = URL.createObjectURL(file);
+        try {
+          const img = new Image();
+          img.decoding = "async";
+          img.src = url;
+          await img.decode();
+          // Small, durable local thumbnail; independent of original Blob URL lifetime.
+          const t = document.createElement("canvas");
+          const tw = 120, th = 120;
+          const scale = Math.min(tw / img.naturalWidth, th / img.naturalHeight);
+          t.width = tw;
+          t.height = th;
+          const tctx = t.getContext("2d");
+          tctx.drawImage(img,
+            Math.round((tw - img.naturalWidth * scale) / 2),
+            Math.round((th - img.naturalHeight * scale) / 2),
+            Math.max(1, Math.round(img.naturalWidth * scale)),
+            Math.max(1, Math.round(img.naturalHeight * scale)));
+          return {
+            file, img,
+            width: img.naturalWidth,
+            height: img.naturalHeight,
+            uploadIndex,
+            thumbnail: t.toDataURL("image/png"),
+          };
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+
+      function sortLoadedImages(mode) {
+        state.sortMode = mode;
+        if (mode === "filename") {
+          state.items.sort((a, b) =>
+            naturalSort.compare(a.file.name, b.file.name) || a.uploadIndex - b.uploadIndex);
+        } else if (mode === "upload") {
+          state.items.sort((a, b) => a.uploadIndex - b.uploadIndex);
+        }
+        els.imageSortMode.value = mode;
+        renderThumbnailList();
+        if (state.items.length) {
+          rebuildMergedCanvas();
+          updateFilenameHint();
+        }
+      }
+
+      function renderThumbnailList() {
+        const list = els.thumbList;
+        list.replaceChildren();
+        const count = state.items.length;
+        els.thumbCount.textContent = count ? `${count} 張圖片・${state.sortMode === "manual" ? "手動排列" : state.sortMode === "upload" ? "上傳順序" : "依檔名排序"}` : "尚未上傳圖片";
+        els.imageSortMode.disabled = count < 2;
+        els.imageSortMode.value = state.sortMode;
+        if (!count) {
+          const empty = document.createElement("li");
+          empty.className = "tiny text-center p-4 border border-dashed border-[#d8d9d3] rounded-xl";
+          empty.textContent = "上傳圖片後會在此顯示縮圖。";
+          list.appendChild(empty);
+          return;
+        }
+
+        const fragment = document.createDocumentFragment();
+        state.items.forEach((item, index) => {
+          const row = document.createElement("li");
+          row.className = "thumb-item";
+          row.dataset.index = String(index);
+          row.setAttribute("aria-label", `第 ${index + 1} 張：${item.file.name}`);
+          row.title = "拖曳以調整圖片順序";
+
+          const number = document.createElement("span");
+          number.className = "thumb-num";
+          number.textContent = String(index + 1);
+
+          const preview = document.createElement("img");
+          preview.className = "thumb-preview";
+          preview.src = item.thumbnail;
+          preview.alt = "";
+          preview.draggable = false;
+
+          const detail = document.createElement("div");
+          detail.className = "thumb-details";
+          const title = document.createElement("div");
+          title.className = "thumb-title";
+          title.textContent = item.file.name;
+          const dims = document.createElement("div");
+          dims.className = "tiny mt-1";
+          dims.textContent = `${item.width} × ${item.height} px`;
+          detail.append(title, dims);
+
+          const grip = document.createElement("button");
+          grip.type = "button";
+          grip.className = "thumb-grip";
+          grip.textContent = "⠿";
+          grip.title = "按住拖曳，或使用方向鍵調整順序";
+          grip.setAttribute("aria-label", `移動第 ${index + 1} 張圖片：${item.file.name}；用方向鍵調整`);
+          grip.addEventListener("keydown", e => {
+            if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+            e.preventDefault();
+            const oldIndex = Number(row.dataset.index);
+            const newIndex = oldIndex + (e.key === "ArrowUp" ? -1 : 1);
+            if (newIndex < 0 || newIndex >= state.items.length) return;
+            moveImage(oldIndex, newIndex);
+            els.thumbList.querySelector(`[data-index="${newIndex}"] .thumb-grip`)?.focus();
+          });
+
+          row.append(number, preview, detail, grip);
+          fragment.appendChild(row);
+        });
+        list.appendChild(fragment);
+      }
+
+      function moveImage(from, to) {
+        const total = state.items.length;
+        if (!Number.isInteger(from) || !Number.isInteger(to) ||
+            from < 0 || from >= total || to < 0 || to >= total || from === to) return false;
+        const [item] = state.items.splice(from, 1);
+        state.items.splice(to, 0, item);
+        sortLoadedImages("manual");
+        setStatus(`已更新圖片順序：${item.file.name} 現在是第 ${to + 1} 張。`, "ok");
+        return true;
+      }
+
+      function clearThumbIndicators() {
+        els.thumbList.querySelectorAll(".drop-before, .drop-after").forEach(el => {
+          el.classList.remove("drop-before", "drop-after");
+        });
+      }
+
+      function thumbPointerDown(e) {
+        const row = e.target.closest(".thumb-item");
+        if (!row || state.items.length < 2 || e.button !== 0) return;
+        // Touch: allow normal list scrolling, except when using the dedicated grip.
+        if (e.pointerType !== "mouse" && !e.target.closest(".thumb-grip")) return;
+        e.preventDefault();
+        els.thumbList.querySelectorAll(".is-dragging").forEach(el => el.classList.remove("is-dragging"));
+        const from = Number(row.dataset.index);
+        state.thumbDrag = {
+          pointerId: e.pointerId, row, from,
+          startX: e.clientX, startY: e.clientY,
+          active: false, insertion: from,
+        };
+        try { row.setPointerCapture(e.pointerId); } catch {}
+        window.addEventListener("pointermove", thumbPointerMove, { passive: false });
+        window.addEventListener("pointerup", thumbPointerEnd);
+        window.addEventListener("pointercancel", thumbPointerCancel);
+      }
+
+      function thumbPointerMove(e) {
+        const d = state.thumbDrag;
+        if (!d || d.pointerId !== e.pointerId) return;
+        if (!d.active && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 5) return;
+        d.active = true;
+        d.row.classList.add("is-dragging");
+        e.preventDefault();
+
+        // Auto-scroll when moving near either edge of the thumbnail list.
+        const list = els.thumbList;
+        const bounds = list.getBoundingClientRect();
+        if (e.clientY > bounds.top && e.clientY < bounds.bottom) {
+          if (e.clientY > bounds.bottom - 32) list.scrollTop += 15;
+          if (e.clientY < bounds.top + 32) list.scrollTop -= 15;
+        }
+
+        clearThumbIndicators();
+        const rows = [...list.querySelectorAll(".thumb-item")];
+        if (!rows.length) return;
+        let target = document.elementFromPoint(e.clientX, e.clientY)?.closest(".thumb-item");
+        // Near the ends of the list, allow placing at beginning/end.
+        if (!target && e.clientX >= bounds.left - 30 && e.clientX <= bounds.right + 30 &&
+            e.clientY >= bounds.top - 45 && e.clientY <= bounds.bottom + 45) {
+          target = e.clientY <= rows[0].getBoundingClientRect().top ? rows[0] : rows.at(-1);
+        }
+        if (!target || !list.contains(target)) {
+          d.insertion = null;
+          return;
+        }
+        const targetIndex = Number(target.dataset.index);
+        const rect = target.getBoundingClientRect();
+        const after = e.clientY > rect.top + rect.height / 2;
+        d.insertion = targetIndex + (after ? 1 : 0);
+        target.classList.add(after ? "drop-after" : "drop-before");
+      }
+
+      function finishThumbDrag(e, canceled) {
+        const d = state.thumbDrag;
+        if (!d || e.pointerId !== d.pointerId) return;
+        state.thumbDrag = null;
+        window.removeEventListener("pointermove", thumbPointerMove);
+        window.removeEventListener("pointerup", thumbPointerEnd);
+        window.removeEventListener("pointercancel", thumbPointerCancel);
+        d.row.classList.remove("is-dragging");
+        clearThumbIndicators();
+        try { d.row.releasePointerCapture(d.pointerId); } catch {}
+        if (canceled || !d.active || d.insertion == null) return;
+        const destination = d.insertion > d.from ? d.insertion - 1 : d.insertion;
+        moveImage(d.from, destination);
+      }
+
+      function thumbPointerEnd(e) { finishThumbDrag(e, false); }
+      function thumbPointerCancel(e) { finishThumbDrag(e, true); }
+
+      // 依目前是否已有圖片，切換「新增圖片」按鈕與上傳區文字。
+      function updateUploadUI() {
+        const has = state.items.length > 0;
+        els.addMoreBtn.classList.toggle("hidden", !has);
+        els.thumbAddBtn.classList.toggle("hidden", !has);
+        els.dropTitle.textContent = has ? "拖曳圖片到這裡新增" : "拖曳圖片到這裡";
+        els.dropSub.textContent = has ? "新增的圖片會加入現有圖片，不會覆蓋" : "或點擊選擇多張圖片";
+      }
+
+      const fileKey = (f) => `${f.name}|${f.size}|${f.lastModified}`;
+
+      // 新增圖片：永遠「加入」現有清單，不會取代已上傳的圖片。
+      async function ingestFiles(fileList) {
+        const files = [...fileList].filter(f => f.type.startsWith("image/"));
+        els.fileInput.value = "";
+        if (!files.length) {
+          setStatus("沒有偵測到可讀取的圖片檔。", "warn");
+          return;
+        }
+
+        // 略過與現有圖片完全相同（檔名＋大小＋修改時間）的檔案，避免誤按重複加入。
+        const known = new Set(state.items.map(it => fileKey(it.file)));
+        const fresh = [];
+        let duplicates = 0;
+        for (const f of files) {
+          const k = fileKey(f);
+          if (known.has(k)) { duplicates++; continue; }
+          known.add(k);
+          fresh.push(f);
+        }
+        if (!fresh.length) {
+          setStatus(`這 ${duplicates} 張圖片已經上傳過，未重複新增。`, "warn");
+          return;
+        }
+
+        const gen = state.generation;
+        setStatus(`正在讀取 ${fresh.length} 張圖片…`);
+        try {
+          const results = await Promise.allSettled(
+            fresh.map(file => fileToImage(file, state.uploadCounter++)));
+          if (gen !== state.generation) return;  // 讀取期間按了「清除全部」
+
+          const loaded = results.filter(r => r.status === "fulfilled").map(r => r.value);
+          const failed = results.length - loaded.length;
+          if (!loaded.length) {
+            setStatus("圖片讀取失敗，請確認格式是否支援。已上傳的圖片不受影響。", "warn");
+            return;
+          }
+
+          const wasEmpty = state.items.length === 0;
+          state.items.push(...loaded);
+
+          els.fileSummary.textContent =
+            `目前共 ${state.items.length} 張圖片；可在預覽旁查看縮圖與調整拼接順序。`;
+          els.mergeControls.classList.toggle("hidden", state.items.length <= 1);
+          els.downloadBtn.disabled = false;
+          els.selectAll.disabled = false;
+          updateUploadUI();
+
+          // 手動排序時，新圖加在最後；其他模式依該模式重新排序。
+          sortLoadedImages(wasEmpty ? "filename" : state.sortMode);
+
+          if (wasEmpty) {
+            resetGrid(true);
+            await nextFrame();
+            if (gen === state.generation) fitToView();
+          }
+
+          const notes = [];
+          if (duplicates) notes.push(`略過 ${duplicates} 張重複`);
+          if (failed) notes.push(`${failed} 張讀取失敗`);
+          setStatus(
+            `已新增 ${loaded.length} 張圖片，共 ${state.items.length} 張` +
+            (notes.length ? `（${notes.join("、")}）` : "") + "。",
+            failed ? "warn" : "ok");
+        } catch (err) {
+          console.error(err);
+          if (gen === state.generation) setStatus("圖片讀取失敗，請確認格式是否支援。", "warn");
+        }
+      }
+
+      function rebuildMergedCanvas() {
+        if (!state.items.length) {
+          clearCanvasState();
+          return;
+        }
+
+        const vertical = state.items.length === 1 || els.mergeMode.value === "vertical";
+        let width, height;
+
+        if (state.items.length === 1) {
+          width = state.items[0].width;
+          height = state.items[0].height;
+        } else if (vertical) {
+          width = Math.max(...state.items.map(x => x.width));
+          height = state.items.reduce((sum, x) => sum + x.height, 0);
+        } else {
+          width = state.items.reduce((sum, x) => sum + x.width, 0);
+          height = Math.max(...state.items.map(x => x.height));
+        }
+
+        const c = state.mergedCanvas;
+        c.width = Math.max(1, width);
+        c.height = Math.max(1, height);
+        const cctx = c.getContext("2d");
+        cctx.clearRect(0, 0, c.width, c.height);
+
+        let offset = 0;
+        for (const item of state.items) {
+          if (state.items.length === 1) {
+            cctx.drawImage(item.img, 0, 0);
+          } else if (vertical) {
+            const x = Math.round((c.width - item.width) / 2);
+            cctx.drawImage(item.img, x, offset);
+            offset += item.height;
+          } else {
+            const y = Math.round((c.height - item.height) / 2);
+            cctx.drawImage(item.img, offset, y);
+            offset += item.width;
+          }
+        }
+
+        renderFinalCanvas();
+      }
+
+      function renderFinalCanvas() {
+        if (!state.items.length) return;
+        const pad = getPadding();
+        const src = state.mergedCanvas;
+        const width = src.width + pad.left + pad.right;
+        const height = src.height + pad.top + pad.bottom;
+
+        // 瀏覽器 canvas 有尺寸上限，先做保守防呆。
+        if (width <= 0 || height <= 0 || width > 32767 || height > 32767) {
+          setStatus("目前畫布尺寸過大，請減少留白或圖片尺寸。", "warn");
+          return;
+        }
+
+        els.previewCanvas.width = width;
+        els.previewCanvas.height = height;
+
+        ctx.fillStyle = els.bgColor.value || "#ffffff";
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(src, pad.left, pad.top);
+
+        els.emptyPreview.classList.add("hidden");
+        els.stage.classList.remove("hidden");
+
+        updateStageSize();
+        renderGridOverlay();
+        renderSliceStats();
+
+        els.canvasMeta.textContent = `最終畫布 ${width.toLocaleString()} × ${height.toLocaleString()} px`;
+      }
+
+      function clearCanvasState() {
+        els.previewCanvas.width = 1;
+        els.previewCanvas.height = 1;
+        els.stage.classList.add("hidden");
+        els.emptyPreview.classList.remove("hidden");
+        els.gridOverlay.innerHTML = "";
+        els.canvasMeta.textContent = "尚未載入圖片";
+        els.sliceStats.innerHTML = '<div class="p-4 tiny">載入圖片後會即時計算每張切圖尺寸。</div>';
+        els.downloadBtn.disabled = true;
+        els.selectAll.disabled = true;
+        els.selectAll.checked = true;
+      }
+
+      function resetGrid(resetSelection = false) {
+        const { cols, rows } = getGridCounts();
+        state.xRatios = equalRatios(cols);
+        state.yRatios = equalRatios(rows);
+        if (resetSelection) resetSelections();
+        renderGridOverlay();
+        renderSliceStats();
+      }
+
+      function updateStageSize() {
+        if (!state.items.length) return;
+        const w = Math.max(1, Math.round(els.previewCanvas.width * state.zoom));
+        const h = Math.max(1, Math.round(els.previewCanvas.height * state.zoom));
+        els.stage.style.width = `${w}px`;
+        els.stage.style.height = `${h}px`;
+        const percentage = Math.round(state.zoom * 100);
+        els.zoomLabel.textContent = `${percentage}%`;
+        els.zoomRange.value = String(clamp(percentage, 5, 600));
+      }
+
+      function setZoom(next) {
+        state.zoom = clamp(next, state.minZoom, state.maxZoom);
+        updateStageSize();
+      }
+
+      function fitToView() {
+        if (!state.items.length) return;
+        const cw = els.previewScroller.clientWidth - 44;
+        const ch = els.previewScroller.clientHeight - 44;
+        if (cw <= 0 || ch <= 0) return;
+
+        const fit = Math.min(
+          1,
+          cw / els.previewCanvas.width,
+          ch / els.previewCanvas.height
+        );
+        setZoom(Math.max(state.minZoom, fit));
+        els.previewScroller.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }
+
+      function gridBoundaries() {
+        const { cols, rows } = getGridCounts();
+        state.xRatios = sanitizeRatios(state.xRatios, cols);
+        state.yRatios = sanitizeRatios(state.yRatios, rows);
+        return {
+          xs: [0, ...state.xRatios, 1],
+          ys: [0, ...state.yRatios, 1],
+          cols,
+          rows,
+        };
+      }
+
+      function renderGridOverlay() {
+        if (!state.items.length) return;
+
+        const { xs, ys, cols, rows } = gridBoundaries();
+        const frag = document.createDocumentFragment();
+        els.gridOverlay.innerHTML = "";
+
+        state.xRatios.forEach((ratio, index) => {
+          const line = document.createElement("div");
+          line.className = "grid-line vertical";
+          line.style.left = `${ratio * 100}%`;
+          line.dataset.axis = "x";
+          line.dataset.index = String(index);
+          line.addEventListener("pointerdown", startLineDrag);
+          frag.appendChild(line);
+        });
+
+        state.yRatios.forEach((ratio, index) => {
+          const line = document.createElement("div");
+          line.className = "grid-line horizontal";
+          line.style.top = `${ratio * 100}%`;
+          line.dataset.axis = "y";
+          line.dataset.index = String(index);
+          line.addEventListener("pointerdown", startLineDrag);
+          frag.appendChild(line);
+        });
+
+        let index = 0;
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const label = document.createElement("div");
+            label.className = "slice-label";
+            label.textContent = `#${index + 1}`;
+            label.style.left = `${((xs[c] + xs[c + 1]) / 2) * 100}%`;
+            label.style.top = `${((ys[r] + ys[r + 1]) / 2) * 100}%`;
+            frag.appendChild(label);
+            index++;
+          }
+        }
+
+        els.gridOverlay.appendChild(frag);
+      }
+
+      function startLineDrag(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!state.items.length) return;
+
+        const target = e.currentTarget;
+        const axis = target.dataset.axis;
+        const index = Number(target.dataset.index);
+
+        target.classList.add("dragging");
+        target.setPointerCapture?.(e.pointerId);
+
+        state.dragging = {
+          pointerId: e.pointerId,
+          axis,
+          index,
+          target,
+        };
+
+        window.addEventListener("pointermove", onLineDrag, { passive: false });
+        window.addEventListener("pointerup", endLineDrag, { passive: false });
+        window.addEventListener("pointercancel", endLineDrag, { passive: false });
+      }
+
+      function onLineDrag(e) {
+        const d = state.dragging;
+        if (!d || e.pointerId !== d.pointerId) return;
+        e.preventDefault();
+
+        const rect = els.stage.getBoundingClientRect();
+        const dimension = d.axis === "x" ? els.previewCanvas.width : els.previewCanvas.height;
+        const raw = d.axis === "x"
+          ? (e.clientX - rect.left) / rect.width
+          : (e.clientY - rect.top) / rect.height;
+
+        const arr = d.axis === "x" ? state.xRatios : state.yRatios;
+        const minGap = Math.max(0.001, Math.min(0.02, 2 / Math.max(2, dimension)));
+        const prev = d.index === 0 ? 0 : arr[d.index - 1];
+        const next = d.index === arr.length - 1 ? 1 : arr[d.index + 1];
+        const ratio = clamp(raw, prev + minGap, next - minGap);
+
+        arr[d.index] = ratio;
+        if (d.axis === "x") d.target.style.left = `${ratio * 100}%`;
+        else d.target.style.top = `${ratio * 100}%`;
+
+        scheduleStatsRender();
+      }
+
+      function endLineDrag(e) {
+        const d = state.dragging;
+        if (!d || (e.pointerId != null && e.pointerId !== d.pointerId)) return;
+        d.target.classList.remove("dragging");
+        try { d.target.releasePointerCapture?.(d.pointerId); } catch {}
+        state.dragging = null;
+
+        window.removeEventListener("pointermove", onLineDrag);
+        window.removeEventListener("pointerup", endLineDrag);
+        window.removeEventListener("pointercancel", endLineDrag);
+
+        renderGridOverlay();
+        renderSliceStats();
+      }
+
+      function scheduleStatsRender() {
+        if (state.panelRaf) return;
+        state.panelRaf = requestAnimationFrame(() => {
+          state.panelRaf = 0;
+          renderSliceStats();
+        });
+      }
+
+      function getSlices() {
+        if (!state.items.length) return [];
+        const { xs, ys, cols, rows } = gridBoundaries();
+        const width = els.previewCanvas.width;
+        const height = els.previewCanvas.height;
+        const maxW = getEffectiveMaxWidth();
+
+        const xpx = xs.map((x, i) =>
+          i === xs.length - 1 ? width : Math.round(x * width)
+        );
+        const ypx = ys.map((y, i) =>
+          i === ys.length - 1 ? height : Math.round(y * height)
+        );
+
+        const slices = [];
+        let index = 0;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const sx = xpx[c];
+            const sy = ypx[r];
+            const sw = Math.max(0, xpx[c + 1] - xpx[c]);
+            const sh = Math.max(0, ypx[r + 1] - ypx[r]);
+
+            let outW = sw;
+            let outH = sh;
+            if (maxW && sw > maxW && sw > 0) {
+              const scale = maxW / sw;
+              outW = maxW;
+              outH = Math.max(1, Math.round(sh * scale));
+            }
+
+            slices.push({
+              index,
+              sx, sy, sw, sh,
+              outW, outH,
+              selected: state.selected.has(index),
+            });
+            index++;
+          }
+        }
+        return slices;
+      }
+
+      function renderSliceStats() {
+        const slices = getSlices();
+        if (!slices.length) return;
+
+        const frag = document.createDocumentFragment();
+        els.sliceStats.innerHTML = "";
+
+        for (const s of slices) {
+          const row = document.createElement("label");
+          row.className = "slice-row";
+
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = state.selected.has(s.index);
+          cb.className = "accent-[#7f8b79] w-4 h-4";
+          cb.addEventListener("change", () => {
+            if (cb.checked) state.selected.add(s.index);
+            else state.selected.delete(s.index);
+            updateSelectAllState();
+            setStatus(`${state.selected.size} 張切圖已選取。`, "ok");
+          });
+
+          const info = document.createElement("div");
+          info.innerHTML = `<strong class="text-sm">#${s.index + 1}</strong><div class="tiny">來源 ${s.sw}×${s.sh}px</div>`;
+
+          const size = document.createElement("div");
+          size.className = "slice-size text-right text-xs font-extrabold";
+          size.textContent = s.sw === 0 || s.sh === 0 ? "略過" : `${s.outW} × ${s.outH}`;
+          if (s.outW !== s.sw || s.outH !== s.sh) {
+            const badge = document.createElement("div");
+            badge.className = "tiny";
+            badge.textContent = "已縮小";
+            size.appendChild(badge);
+          }
+
+          row.append(cb, info, size);
+          frag.appendChild(row);
+        }
+
+        els.sliceStats.appendChild(frag);
+        updateSelectAllState();
+      }
+
+      function updateSelectAllState() {
+        const total = getSlices().length;
+        els.selectAll.indeterminate = state.selected.size > 0 && state.selected.size < total;
+        els.selectAll.checked = total > 0 && state.selected.size === total;
+      }
+
+      function canvasToBlob(canvas, type, quality) {
+        return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+      }
+
+      async function exportZip() {
+        if (!state.items.length) return;
+        if (typeof JSZip === "undefined") {
+          setStatus("JSZip 載入失敗，請確認目前網路允許載入 CDN。", "warn");
+          return;
+        }
+
+        const slices = getSlices().filter(s => state.selected.has(s.index) && s.sw > 0 && s.sh > 0);
+        if (!slices.length) {
+          setStatus("目前沒有可匯出的已勾選切圖。", "warn");
+          return;
+        }
+
+        els.downloadBtn.disabled = true;
+        const oldText = els.downloadBtn.textContent;
+        els.downloadBtn.textContent = "正在建立 ZIP…";
+
+        try {
+          const zip = new JSZip();
+          const png = isPngExport();
+          const mimeType = png ? "image/png" : "image/jpeg";
+          const extension = exportExtension();
+          const quality = png ? undefined : intValue(els.quality, 90, 10, 100) / 100;
+          const outputPrefix = getOutputPrefix();
+          let done = 0;
+
+          for (const s of slices) {
+            const temp = document.createElement("canvas");
+            temp.width = Math.max(1, s.outW);
+            temp.height = Math.max(1, s.outH);
+
+            const tctx = temp.getContext("2d", { alpha: false });
+            tctx.imageSmoothingEnabled = true;
+            tctx.imageSmoothingQuality = "high";
+            tctx.drawImage(
+              els.previewCanvas,
+              s.sx, s.sy, s.sw, s.sh,
+              0, 0, s.outW, s.outH
+            );
+
+            // PNG uses lossless encoding and does not receive the JPG quality parameter.
+            const blob = await canvasToBlob(temp, mimeType, quality);
+            if (!blob) throw new Error(`無法產生 ${extension.toUpperCase()} 切圖`);
+            if (blob.type && blob.type !== mimeType) {
+              throw new Error(`瀏覽器未能輸出要求的 ${extension.toUpperCase()} 格式`);
+            }
+
+            zip.file(`${outputPrefix}-${s.index + 1}.${extension}`, blob);
+            done++;
+            setStatus(`正在處理切圖 ${done}/${slices.length}…`);
+          }
+
+          if (!done) {
+            setStatus("沒有產生有效切圖，請調整網格位置。", "warn");
+            return;
+          }
+
+          setStatus("正在壓縮 ZIP…");
+          const content = await zip.generateAsync({
+            type: "blob",
+            compression: "DEFLATE",
+            compressionOptions: { level: 6 },
+          });
+
+          const url = URL.createObjectURL(content);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = `${outputPrefix}-切圖.zip`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+          setStatus(`完成：已打包 ${done} 張 ${extension.toUpperCase()}${png ? "（無損格式）" : ""}。`, "ok");
+        } catch (err) {
+          console.error(err);
+          setStatus("ZIP 匯出失敗。若圖片非常大，請降低圖片尺寸或分批處理。", "warn");
+        } finally {
+          els.downloadBtn.disabled = false;
+          els.downloadBtn.textContent = oldText;
+        }
+      }
+
+      function nextFrame() {
+        return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      }
+
+      function clearAll() {
+        // 清除是唯一會移除已上傳圖片的操作，先確認避免誤觸。
+        if (state.items.length &&
+            !window.confirm(`確定要清除目前的 ${state.items.length} 張圖片嗎？此動作無法復原。`)) {
+          return;
+        }
+        state.generation++;      // 作廢任何仍在讀取中的圖片
+        state.uploadCounter = 0;
+        state.items = [];
+        state.sortMode = "filename";
+        state.thumbDrag = null;
+        els.imageSortMode.value = "filename";
+        renderThumbnailList();
+        state.mergedCanvas.width = 1;
+        state.mergedCanvas.height = 1;
+        state.xRatios = equalRatios(getGridCounts().cols);
+        state.yRatios = equalRatios(getGridCounts().rows);
+        state.selected.clear();
+        state.zoom = 1;
+        setAddLineMode(null);
+
+        els.fileSummary.textContent = "尚未載入圖片";
+        els.mergeControls.classList.add("hidden");
+        els.fileInput.value = "";
+        els.zoomLabel.textContent = "100%";
+        els.zoomRange.value = "100";
+        els.filenamePrefix.value = "";
+        updateUploadUI();
+        updateFilenameHint();
+        setStatus("請先載入圖片。");
+        clearCanvasState();
+      }
+
+      // Upload / drag & drop
+      els.dropzone.addEventListener("click", () => els.fileInput.click());
+      els.dropzone.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          els.fileInput.click();
+        }
+      });
+      els.addMoreBtn.addEventListener("click", () => els.fileInput.click());
+      els.thumbAddBtn.addEventListener("click", () => els.fileInput.click());
+      els.fileInput.addEventListener("change", () => ingestFiles(els.fileInput.files));
+      els.imageSortMode.addEventListener("change", () => sortLoadedImages(els.imageSortMode.value));
+      els.thumbList.addEventListener("pointerdown", thumbPointerDown);
+
+      ["dragenter", "dragover"].forEach(type => {
+        els.dropzone.addEventListener(type, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          els.dropzone.classList.add("dragover");
+        });
+      });
+      ["dragleave", "drop"].forEach(type => {
+        els.dropzone.addEventListener(type, e => {
+          e.preventDefault();
+          e.stopPropagation();
+          els.dropzone.classList.remove("dragover");
+        });
+      });
+      els.dropzone.addEventListener("drop", e => ingestFiles(e.dataTransfer.files));
+
+      // Prevent browser from opening dropped image when user misses dropzone.
+      ["dragover", "drop"].forEach(type => {
+        window.addEventListener(type, e => e.preventDefault(), false);
+      });
+
+      // Merge / padding
+      els.mergeMode.addEventListener("change", () => {
+        rebuildMergedCanvas();
+        resetGrid(true);
+        nextFrame().then(fitToView);
+      });
+
+      [els.padTop, els.padBottom, els.padLeft, els.padRight].forEach(el => {
+        el.addEventListener("input", renderFinalCanvas);
+        el.addEventListener("change", () => {
+          el.value = String(intValue(el));
+          renderFinalCanvas();
+        });
+      });
+
+      els.bgColor.addEventListener("input", () => {
+        els.bgText.value = els.bgColor.value.toUpperCase();
+        renderFinalCanvas();
+      });
+
+      els.bgText.addEventListener("change", () => {
+        const value = els.bgText.value.trim();
+        if (/^#[0-9a-fA-F]{6}$/.test(value)) {
+          els.bgColor.value = value;
+          els.bgText.value = value.toUpperCase();
+          renderFinalCanvas();
+        } else {
+          els.bgText.value = els.bgColor.value.toUpperCase();
+        }
+      });
+
+      // Grid counts
+      [els.cols, els.rows].forEach(el => {
+        el.addEventListener("change", () => {
+          const counts = getGridCounts();
+          els.cols.value = String(counts.cols);
+          els.rows.value = String(counts.rows);
+          resetGrid(true);
+        });
+      });
+
+      // Free-position grid line creation
+      els.addVerticalLineBtn.addEventListener("click", () => {
+        setAddLineMode(state.addLineMode === "x" ? null : "x");
+      });
+
+      els.addHorizontalLineBtn.addEventListener("click", () => {
+        setAddLineMode(state.addLineMode === "y" ? null : "y");
+      });
+
+      els.cancelAddLineBtn.addEventListener("click", () => setAddLineMode(null));
+
+      // Pointer Events 同時支援滑鼠、觸控筆與手機觸控。
+      els.stage.addEventListener("pointerdown", placeFreeGridLine);
+
+      // Export controls. Format controls both filename extension and encoder.
+      els.exportFormat.addEventListener("change", syncExportFormatUI);
+      els.preservePngSize.addEventListener("change", syncExportFormatUI);
+      els.quality.addEventListener("input", () => {
+        els.qualityLabel.textContent = `${els.quality.value}%`;
+      });
+
+      els.maxWidthRange.addEventListener("input", () => updateMaxWidth(els.maxWidthRange.value));
+      els.maxWidth.addEventListener("input", () => updateMaxWidth(els.maxWidth.value, false));
+      els.maxWidth.addEventListener("change", () => updateMaxWidth(els.maxWidth.value));
+      els.filenamePrefix.addEventListener("input", updateFilenameHint);
+
+      els.selectAll.addEventListener("change", () => {
+        const slices = getSlices();
+        if (els.selectAll.checked) {
+          state.selected = new Set(slices.map(s => s.index));
+        } else {
+          state.selected.clear();
+        }
+        renderSliceStats();
+      });
+
+      els.downloadBtn.addEventListener("click", exportZip);
+      els.clearBtn.addEventListener("click", clearAll);
+
+      // Zoom controls
+      els.zoomIn.addEventListener("click", () => setZoom(state.zoom * 1.15));
+      els.zoomOut.addEventListener("click", () => setZoom(state.zoom / 1.15));
+      els.fitBtn.addEventListener("click", fitToView);
+      els.zoomRange.addEventListener("input", () => {
+        setZoom(Number(els.zoomRange.value) / 100);
+      });
+
+      els.previewScroller.addEventListener("wheel", e => {
+        if (!(e.ctrlKey || e.metaKey) || !state.items.length) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.08 : 1 / 1.08;
+        setZoom(state.zoom * factor);
+      }, { passive: false });
+
+      window.addEventListener("keydown", e => {
+        const target = e.target;
+        const editing = target && (
+          target.tagName === "INPUT" ||
+          target.tagName === "SELECT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable
+        );
+        if (editing) return;
+
+        if (e.key === "Escape" && state.addLineMode) {
+          e.preventDefault();
+          setAddLineMode(null);
+          return;
+        }
+
+        if (e.key === "+" || e.key === "=") {
+          e.preventDefault();
+          setZoom(state.zoom * 1.15);
+        } else if (e.key === "-" || e.key === "_") {
+          e.preventDefault();
+          setZoom(state.zoom / 1.15);
+        } else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+          e.preventDefault();
+          fitToView();
+        }
+      });
+
+      window.addEventListener("resize", () => {
+        // 不強制改變使用者手動縮放；僅在目前比例接近 fit 時重新計算。
+        if (state.items.length && state.zoom <= 1) {
+          clearTimeout(state.renderToken);
+          state.renderToken = setTimeout(fitToView, 140);
+        }
+      });
+
+      clearCanvasState();
+      renderThumbnailList();
+      updateUploadUI();
+      updateFilenameHint();
+    })();
+  </script>
+</body>
+</html>
