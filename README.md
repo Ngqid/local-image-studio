@@ -11,6 +11,7 @@ A single-file, fully local image tool: merge multiple images, add padding, slice
 - Merge vertically or horizontally; reorder by filename, upload order, or drag-and-drop
 - Padding with custom background color
 - Grid slicing plus free vertical/horizontal lines you can drag
+- Auto-detect: finds blank bands (separators / whitespace) running across the image and places grid lines at their centers; adjustable minimum gap
 - Export JPG (quality + max width) or lossless PNG (optional original size) as ZIP
 - "Clear all" asks for confirmation
 
@@ -36,6 +37,7 @@ MIT
 - 垂直或水平拼接；可依檔名、上傳順序或拖曳排序
 - 四邊留白與自訂背景色
 - 網格切圖，並可自由新增、拖曳水平／垂直格線
+- 自動偵測：找出橫貫／縱貫整張圖的空白帶（分隔線、留白），在中央自動放格線；可調最小空白間距
 - 匯出 JPG（可調品質與最大寬度）或無損 PNG（可保留原尺寸）ZIP
 - 「清除全部」會先跳出確認
 

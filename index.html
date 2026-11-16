@@ -514,6 +514,18 @@
           <p class="tiny mt-3">網格線可直接拖曳。位置以比例儲存，所以預覽縮放後不會跑位。</p>
 
           <div class="mt-4 pt-4 border-t border-[#e2e2dc]">
+            <div class="label">自動偵測切圖</div>
+            <div class="flex items-end gap-2">
+              <label class="flex-1">
+                <span class="label">最小空白間距 px</span>
+                <input id="autoGap" class="field" type="number" min="1" max="500" step="1" value="" placeholder="自動" inputmode="numeric" />
+              </label>
+              <button id="autoDetectBtn" class="btn primary" type="button" disabled>✨ 自動偵測</button>
+            </div>
+            <p class="tiny mt-2">找出圖片中橫貫／縱貫的純色空白帶（區塊間的留白、分隔），在中央放置格線。間距留空＝依圖寬自動判斷。會取代目前的格線，偵測後仍可拖曳微調。</p>
+          </div>
+
+          <div class="mt-4 pt-4 border-t border-[#e2e2dc]">
             <div class="label">自由新增格線</div>
             <div class="grid grid-cols-2 gap-2">
               <button id="addVerticalLineBtn" class="btn" type="button">＋ 垂直格線</button>
@@ -703,6 +715,8 @@
         addVerticalLineBtn: $("addVerticalLineBtn"),
         addHorizontalLineBtn: $("addHorizontalLineBtn"),
         cancelAddLineBtn: $("cancelAddLineBtn"),
+        autoGap: $("autoGap"),
+        autoDetectBtn: $("autoDetectBtn"),
         addLineHint: $("addLineHint"),
 
         exportFormat: $("exportFormat"),
@@ -1229,6 +1243,7 @@
             `目前共 ${state.items.length} 張圖片；可在預覽旁查看縮圖與調整拼接順序。`;
           els.mergeControls.classList.toggle("hidden", state.items.length <= 1);
           els.downloadBtn.disabled = false;
+          els.autoDetectBtn.disabled = false;
           els.selectAll.disabled = false;
           updateUploadUI();
 
@@ -1337,6 +1352,7 @@
         els.canvasMeta.textContent = "尚未載入圖片";
         els.sliceStats.innerHTML = '<div class="p-4 tiny">載入圖片後會即時計算每張切圖尺寸。</div>';
         els.downloadBtn.disabled = true;
+        els.autoDetectBtn.disabled = true;
         els.selectAll.disabled = true;
         els.selectAll.checked = true;
       }
@@ -1388,6 +1404,92 @@
         if (cw <= 0) return;
         setZoom(cw / els.previewCanvas.width);
         els.previewScroller.scrollTo({ top: 0, left: 0, behavior: "smooth" });
+      }
+
+      // ---- 自動偵測切圖：找出橫貫／縱貫整張圖的純色空白帶 ----
+      // 逐段讀取像素以節省記憶體。一列（行）內各色版的最大最小值相差不超過 tol，視為空白。
+      function scanBlankLines(width, height, readRows, tol) {
+        const rowBlank = new Uint8Array(height);
+        const colBlank = new Uint8Array(width).fill(1);
+        const cMin = new Uint8Array(width * 3).fill(255);
+        const cMax = new Uint8Array(width * 3);
+        const strip = Math.max(1, Math.floor(1000000 / width));
+        for (let y0 = 0; y0 < height; y0 += strip) {
+          const h = Math.min(strip, height - y0);
+          const d = readRows(y0, h);
+          for (let r = 0; r < h; r++) {
+            const base = r * width * 4;
+            let mn0 = 255, mn1 = 255, mn2 = 255, mx0 = 0, mx1 = 0, mx2 = 0;
+            for (let x = 0; x < width; x++) {
+              const i = base + x * 4, k = x * 3;
+              const R = d[i], G = d[i + 1], B = d[i + 2];
+              if (R < mn0) mn0 = R; if (R > mx0) mx0 = R;
+              if (G < mn1) mn1 = G; if (G > mx1) mx1 = G;
+              if (B < mn2) mn2 = B; if (B > mx2) mx2 = B;
+              if (R < cMin[k]) cMin[k] = R; if (R > cMax[k]) cMax[k] = R;
+              if (G < cMin[k + 1]) cMin[k + 1] = G; if (G > cMax[k + 1]) cMax[k + 1] = G;
+              if (B < cMin[k + 2]) cMin[k + 2] = B; if (B > cMax[k + 2]) cMax[k + 2] = B;
+            }
+            rowBlank[y0 + r] = (mx0 - mn0 <= tol && mx1 - mn1 <= tol && mx2 - mn2 <= tol) ? 1 : 0;
+          }
+        }
+        for (let x = 0; x < width; x++) {
+          const k = x * 3;
+          colBlank[x] = (cMax[k] - cMin[k] <= tol && cMax[k + 1] - cMin[k + 1] <= tol &&
+            cMax[k + 2] - cMin[k + 2] <= tol) ? 1 : 0;
+        }
+        return { rowBlank, colBlank };
+      }
+
+      // 回傳空白帶的中心位置。貼著邊緣的空白（外圍留白）不算分隔；最多保留 maxCount 條（取最寬者）。
+      function findBands(flags, minGap, maxCount = 19) {
+        const bands = [];
+        let i = 0;
+        while (i < flags.length) {
+          if (!flags[i]) { i++; continue; }
+          let j = i;
+          while (j < flags.length && flags[j]) j++;
+          if (i > 0 && j < flags.length && j - i >= minGap) {
+            bands.push({ pos: Math.round((i + j) / 2), len: j - i });
+          }
+          i = j;
+        }
+        return bands.sort((a, b) => b.len - a.len).slice(0, maxCount)
+          .sort((a, b) => a.pos - b.pos).map(b => b.pos);
+      }
+
+      async function autoDetectSlices() {
+        if (!state.items.length) return;
+        const w = els.previewCanvas.width, h = els.previewCanvas.height;
+        // 留空＝自動：約為圖寬的 7.5%（至少 8px），避開文字行距等小空隙，只抓區塊間的大空白。
+        const typed = Math.round(Number(els.autoGap.value));
+        const minGap = typed >= 1 ? clamp(typed, 1, 500) : Math.max(8, Math.round(w * 0.075));
+        els.autoDetectBtn.disabled = true;
+        setStatus("正在偵測切圖位置…");
+        await nextFrame();
+        try {
+          const { rowBlank, colBlank } = scanBlankLines(
+            w, h, (y, n) => ctx.getImageData(0, y, w, n).data, 12);
+          const ys = findBands(rowBlank, minGap);
+          const xs = findBands(colBlank, minGap);
+          if (!xs.length && !ys.length) {
+            setStatus(`沒有找到寬度 ≥ ${minGap}px 的空白帶。可調小「最小空白間距」，或改用手動格線。`, "warn");
+            return;
+          }
+          state.xRatios = xs.map(p => p / w);
+          state.yRatios = ys.map(p => p / h);
+          els.cols.value = String(xs.length + 1);
+          els.rows.value = String(ys.length + 1);
+          resetSelections();
+          renderGridOverlay();
+          renderSliceStats();
+          setStatus(`偵測完成：${xs.length + 1} 欄 × ${ys.length + 1} 列。可拖曳格線微調。`, "ok");
+        } catch (err) {
+          console.error(err);
+          setStatus("自動偵測失敗，圖片可能過大。", "warn");
+        } finally {
+          els.autoDetectBtn.disabled = !state.items.length;
+        }
       }
 
       function gridBoundaries() {
@@ -1819,6 +1921,7 @@
       });
 
       els.cancelAddLineBtn.addEventListener("click", () => setAddLineMode(null));
+      els.autoDetectBtn.addEventListener("click", autoDetectSlices);
 
       // Pointer Events 同時支援滑鼠、觸控筆與手機觸控。
       els.stage.addEventListener("pointerdown", placeFreeGridLine);
