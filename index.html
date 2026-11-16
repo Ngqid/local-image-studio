@@ -232,6 +232,31 @@
       top: 8px;
     }
 
+    .grid-line.selected::after { background: #e5484d; box-shadow: 0 0 0 1px rgba(255,255,255,.85); }
+    .grid-line.vertical.selected::after { width: 3px; left: 7.5px; }
+    .grid-line.horizontal.selected::after { height: 3px; top: 7.5px; }
+    .line-del {
+      position: absolute;
+      z-index: 30;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      background: #e5484d;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 900;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      pointer-events: auto;
+      touch-action: manipulation;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    .grid-line.vertical .line-del { top: 10px; left: 50%; transform: translateX(-50%); }
+    .grid-line.horizontal .line-del { left: 10px; top: 50%; transform: translateY(-50%); }
+
     .grid-line.dragging::after {
       background: #2f3d34;
       box-shadow: 0 0 0 2px rgba(255,255,255,.82);
@@ -532,6 +557,8 @@
               <button id="addHorizontalLineBtn" class="btn" type="button">＋ 水平格線</button>
             </div>
             <button id="cancelAddLineBtn" class="btn ghost w-full mt-2 hidden" type="button">取消新增格線</button>
+            <button id="deleteLineBtn" class="btn w-full mt-2" type="button" disabled>🗑 刪除選取的格線</button>
+            <p class="tiny mt-2">點一下預覽中的格線即可選取（變紅），再按上方按鈕、線上的 ✕ 或鍵盤 <span class="kbd">Delete</span> 刪除。點圖片空白處或按 <span class="kbd">Esc</span> 取消選取。</p>
             <p id="addLineHint" class="tiny mt-2">選擇方向後，直接點擊／觸碰預覽圖片任意位置新增格線。</p>
           </div>
         </section>
@@ -717,6 +744,7 @@
         cancelAddLineBtn: $("cancelAddLineBtn"),
         autoGap: $("autoGap"),
         autoDetectBtn: $("autoDetectBtn"),
+        deleteLineBtn: $("deleteLineBtn"),
         addLineHint: $("addLineHint"),
 
         exportFormat: $("exportFormat"),
@@ -769,6 +797,7 @@
         minZoom: 0.05,
         maxZoom: 6,
         dragging: null,
+        selectedLine: null,           // { axis: "x" | "y", index } | null
         addLineMode: null,            // "x" | "y" | null
         renderToken: 0,
         panelRaf: 0,
@@ -939,6 +968,7 @@
           }
         }
 
+        state.selectedLine = null;
         arr.push(ratio);
         arr.sort((a, b) => a - b);
 
@@ -956,6 +986,11 @@
       }
 
       function placeFreeGridLine(e) {
+        // 點在格線以外的地方：取消選取。
+        if (state.selectedLine && !state.dragging && !e.target.closest?.(".grid-line")) {
+          state.selectedLine = null;
+          refreshSelectionDecor();
+        }
         if (!state.addLineMode || !state.items.length || state.dragging) return;
 
         // 點在既有格線上時交由格線拖曳處理，不新增。
@@ -1359,6 +1394,7 @@
 
       function resetGrid(resetSelection = false) {
         const { cols, rows } = getGridCounts();
+        state.selectedLine = null;
         state.xRatios = equalRatios(cols);
         state.yRatios = equalRatios(rows);
         if (resetSelection) resetSelections();
@@ -1476,6 +1512,7 @@
             setStatus(`沒有找到寬度 ≥ ${minGap}px 的空白帶。可調小「最小空白間距」，或改用手動格線。`, "warn");
             return;
           }
+          state.selectedLine = null;
           state.xRatios = xs.map(p => p / w);
           state.yRatios = ys.map(p => p / h);
           els.cols.value = String(xs.length + 1);
@@ -1545,6 +1582,143 @@
         }
 
         els.gridOverlay.appendChild(frag);
+        refreshSelectionDecor();
+      }
+
+      // 依 state.selectedLine 更新格線的選取樣式、✕ 刪除鈕與側邊刪除按鈕。
+      function refreshSelectionDecor() {
+        const s = state.selectedLine;
+        if (s) {
+          const arr = s.axis === "x" ? state.xRatios : state.yRatios;
+          if (s.index < 0 || s.index >= arr.length) state.selectedLine = null;
+        }
+        const sel = state.selectedLine;
+        els.gridOverlay.querySelectorAll(".grid-line").forEach(line => {
+          const on = !!sel && line.dataset.axis === sel.axis && Number(line.dataset.index) === sel.index;
+          line.classList.toggle("selected", on);
+          const badge = line.querySelector(".line-del");
+          if (on && !badge) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "line-del";
+            b.textContent = "✕";
+            b.title = "刪除這條格線";
+            b.setAttribute("aria-label", "刪除這條格線");
+            b.addEventListener("pointerdown", ev => ev.stopPropagation());
+            b.addEventListener("click", ev => { ev.stopPropagation(); deleteSelectedLine(); });
+            line.appendChild(b);
+          } else if (!on && badge) {
+            badge.remove();
+          }
+        });
+        els.deleteLineBtn.disabled = !state.selectedLine;
+      }
+
+      function selectLine(axis, index) {
+        state.selectedLine = { axis, index };
+        refreshSelectionDecor();
+      }
+
+      function deleteSelectedLine() {
+        const s = state.selectedLine;
+        if (!s) return;
+        const arr = s.axis === "x" ? state.xRatios : state.yRatios;
+        if (s.index < 0 || s.index >= arr.length) return;
+        arr.splice(s.index, 1);
+        state.selectedLine = null;
+        (s.axis === "x" ? els.cols : els.rows).value = String(arr.length + 1);
+        resetSelections();
+        renderGridOverlay();
+        renderSliceStats();
+        setStatus(`已刪除一條${s.axis === "x" ? "垂直" : "水平"}格線。`, "ok");
+      }
+
+      // ---- 像素放大鏡：拖曳格線時顯示游標周圍的像素級放大畫面 ----
+      const loupe = { el: null, cv: null, label: null };
+      const LOUPE_SIZE = 180;   // 放大鏡顯示尺寸（CSS px）
+      const LOUPE_SCALE = 10;   // 每個來源像素放大成 10×10
+
+      function ensureLoupe() {
+        if (loupe.el) return;
+        const el = document.createElement("div");
+        el.setAttribute("aria-hidden", "true");
+        el.style.cssText = "position:fixed;z-index:9999;display:none;pointer-events:none;" +
+          "padding:6px;border-radius:14px;background:rgba(251,250,247,.96);" +
+          "border:1px solid #c8cac2;box-shadow:0 10px 30px rgba(63,70,66,.28);";
+        const cv = document.createElement("canvas");
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        cv.width = cv.height = Math.round(LOUPE_SIZE * dpr);
+        cv.style.cssText = `display:block;width:${LOUPE_SIZE}px;height:${LOUPE_SIZE}px;border-radius:8px;`;
+        const label = document.createElement("div");
+        label.style.cssText = "margin-top:5px;text-align:center;font-size:12px;font-weight:800;color:#3f4642;";
+        el.append(cv, label);
+        document.body.appendChild(el);
+        Object.assign(loupe, { el, cv, label, dpr });
+      }
+
+      function showLoupe(e, axis, index) {
+        ensureLoupe();
+        const src = els.previewCanvas;
+        const W = src.width, H = src.height;
+        const rect = els.stage.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const ratio = (axis === "x" ? state.xRatios : state.yRatios)[index];
+        // 與匯出時的切點一致（getSlices 以 Math.round 取整）。
+        const bx = axis === "x" ? Math.round(ratio * W)
+          : clamp(Math.floor((e.clientX - rect.left) / rect.width * W), 0, W);
+        const by = axis === "y" ? Math.round(ratio * H)
+          : clamp(Math.floor((e.clientY - rect.top) / rect.height * H), 0, H);
+
+        const N = Math.round(LOUPE_SIZE / LOUPE_SCALE);        // 視窗涵蓋的來源像素數
+        const x0 = bx - N / 2, y0 = by - N / 2;
+        const S = loupe.cv.width / N;                           // 每個來源像素的實際繪製尺寸
+        const c = loupe.cv.getContext("2d");
+        c.imageSmoothingEnabled = false;
+        c.fillStyle = "#9a9d98";
+        c.fillRect(0, 0, loupe.cv.width, loupe.cv.height);
+
+        // 只繪製與圖片重疊的區域，超出邊界的部分保持灰色。
+        const sx0 = Math.max(0, x0), sy0 = Math.max(0, y0);
+        const sx1 = Math.min(W, x0 + N), sy1 = Math.min(H, y0 + N);
+        if (sx1 > sx0 && sy1 > sy0) {
+          c.drawImage(src, sx0, sy0, sx1 - sx0, sy1 - sy0,
+            (sx0 - x0) * S, (sy0 - y0) * S, (sx1 - sx0) * S, (sy1 - sy0) * S);
+        }
+
+        // 像素格線
+        c.strokeStyle = "rgba(0,0,0,.14)";
+        c.lineWidth = 1;
+        c.beginPath();
+        for (let i = 1; i < N; i++) {
+          c.moveTo(Math.round(i * S) + .5, 0); c.lineTo(Math.round(i * S) + .5, loupe.cv.height);
+          c.moveTo(0, Math.round(i * S) + .5); c.lineTo(loupe.cv.width, Math.round(i * S) + .5);
+        }
+        c.stroke();
+
+        // 切線：畫在「切點」位置（該像素邊界），axis=x 為垂直線，axis=y 為水平線。
+        const mid = loupe.cv.width / 2;
+        c.lineWidth = Math.max(2, loupe.dpr * 1.5);
+        c.strokeStyle = "#e5484d";
+        c.beginPath();
+        if (axis === "x") { c.moveTo(mid, 0); c.lineTo(mid, loupe.cv.height); }
+        else { c.moveTo(0, mid); c.lineTo(loupe.cv.width, mid); }
+        c.stroke();
+
+        loupe.label.textContent = axis === "x"
+          ? `x = ${bx} / ${W} px` : `y = ${by} / ${H} px`;
+
+        // 放在游標右上方；靠近邊緣時換邊，避免遮住正在拖曳的位置。
+        const box = LOUPE_SIZE + 14 + 24;
+        let left = e.clientX + 28, top = e.clientY - box - 20;
+        if (left + box > window.innerWidth - 8) left = e.clientX - box - 28;
+        if (top < 8) top = e.clientY + 28;
+        loupe.el.style.left = `${clamp(left, 8, Math.max(8, window.innerWidth - box - 8))}px`;
+        loupe.el.style.top = `${clamp(top, 8, Math.max(8, window.innerHeight - box - 8))}px`;
+        loupe.el.style.display = "block";
+      }
+
+      function hideLoupe() {
+        if (loupe.el) loupe.el.style.display = "none";
       }
 
       function startLineDrag(e) {
@@ -1557,6 +1731,7 @@
         const index = Number(target.dataset.index);
 
         target.classList.add("dragging");
+        selectLine(axis, index);
         target.setPointerCapture?.(e.pointerId);
 
         state.dragging = {
@@ -1565,6 +1740,7 @@
           index,
           target,
         };
+        showLoupe(e, axis, index);
 
         window.addEventListener("pointermove", onLineDrag, { passive: false });
         window.addEventListener("pointerup", endLineDrag, { passive: false });
@@ -1592,12 +1768,14 @@
         if (d.axis === "x") d.target.style.left = `${ratio * 100}%`;
         else d.target.style.top = `${ratio * 100}%`;
 
+        showLoupe(e, d.axis, d.index);
         scheduleStatsRender();
       }
 
       function endLineDrag(e) {
         const d = state.dragging;
         if (!d || (e.pointerId != null && e.pointerId !== d.pointerId)) return;
+        hideLoupe();
         d.target.classList.remove("dragging");
         try { d.target.releasePointerCapture?.(d.pointerId); } catch {}
         state.dragging = null;
@@ -1820,6 +1998,8 @@
         state.xRatios = equalRatios(getGridCounts().cols);
         state.yRatios = equalRatios(getGridCounts().rows);
         state.selected.clear();
+        state.selectedLine = null;
+        els.deleteLineBtn.disabled = true;
         state.zoom = 1;
         setAddLineMode(null);
 
@@ -1922,6 +2102,7 @@
 
       els.cancelAddLineBtn.addEventListener("click", () => setAddLineMode(null));
       els.autoDetectBtn.addEventListener("click", autoDetectSlices);
+      els.deleteLineBtn.addEventListener("click", deleteSelectedLine);
 
       // Pointer Events 同時支援滑鼠、觸控筆與手機觸控。
       els.stage.addEventListener("pointerdown", placeFreeGridLine);
@@ -1976,9 +2157,16 @@
         );
         if (editing) return;
 
-        if (e.key === "Escape" && state.addLineMode) {
+        if ((e.key === "Delete" || e.key === "Backspace") && state.selectedLine) {
           e.preventDefault();
-          setAddLineMode(null);
+          deleteSelectedLine();
+          return;
+        }
+
+        if (e.key === "Escape" && (state.addLineMode || state.selectedLine)) {
+          e.preventDefault();
+          if (state.addLineMode) setAddLineMode(null);
+          else { state.selectedLine = null; refreshSelectionDecor(); }
           return;
         }
 
