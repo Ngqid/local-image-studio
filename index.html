@@ -406,6 +406,19 @@
       word-break: normal;
       overflow-wrap: anywhere;
     }
+    .thumb-delete {
+      margin-top: 8px;
+      min-height: 32px;
+      padding: 4px 10px;
+      border: 1px solid #e3cfc9;
+      border-radius: 9px;
+      background: #fff;
+      color: #8d655e;
+      font-size: 12px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+    .thumb-delete:hover { background: #f8ece9; border-color: #c9a39a; }
     .thumb-grip {
       grid-area: grip;
       display: grid;
@@ -1114,7 +1127,14 @@
           const dims = document.createElement("div");
           dims.className = "tiny mt-1";
           dims.textContent = `${item.width} × ${item.height} px`;
-          detail.append(title, dims);
+          const del = document.createElement("button");
+          del.type = "button";
+          del.className = "thumb-delete";
+          del.textContent = "🗑 刪除這張";
+          del.title = "從目前圖片中刪除這一張";
+          del.setAttribute("aria-label", `刪除第 ${index + 1} 張圖片：${item.file.name}`);
+          del.addEventListener("click", () => removeImage(Number(row.dataset.index)));
+          detail.append(title, dims, del);
 
           const grip = document.createElement("button");
           grip.type = "button";
@@ -1149,6 +1169,25 @@
         return true;
       }
 
+      // 刪除單張已匯入的圖片；刪到沒有圖片時等同「清除全部」。
+      function removeImage(index) {
+        if (!Number.isInteger(index) || index < 0 || index >= state.items.length) return;
+        const name = state.items[index].file.name;
+        if (!window.confirm(`確定要刪除「${name}」嗎？此動作無法復原（可重新加入同一個檔案）。`)) return;
+        if (state.items.length === 1) { clearAll(true); return; }
+
+        state.items.splice(index, 1);
+        sortLoadedImages(state.sortMode);   // 重新編號、重畫縮圖與合併畫布
+        // 合併畫布尺寸改變，原有格線位置已不適用，重設格線與選取。
+        resetGrid(true);
+        els.fileSummary.textContent =
+          `目前共 ${state.items.length} 張圖片；可在預覽旁查看縮圖與調整拼接順序。`;
+        els.mergeControls.classList.toggle("hidden", state.items.length <= 1);
+        updateFilenameHint();
+        fitToView();
+        setStatus(`已刪除「${name}」，剩 ${state.items.length} 張圖片；格線已重設。`, "ok");
+      }
+
       function clearThumbIndicators() {
         els.thumbList.querySelectorAll(".drop-before, .drop-after").forEach(el => {
           el.classList.remove("drop-before", "drop-after");
@@ -1158,6 +1197,7 @@
       function thumbPointerDown(e) {
         const row = e.target.closest(".thumb-item");
         if (!row || state.items.length < 2 || e.button !== 0) return;
+        if (e.target.closest(".thumb-delete")) return;   // 刪除按鈕不啟動拖曳
         // Touch: allow normal list scrolling, except when using the dedicated grip.
         if (e.pointerType !== "mouse" && !e.target.closest(".thumb-grip")) return;
         e.preventDefault();
@@ -1986,9 +2026,9 @@
         return new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
       }
 
-      function clearAll() {
-        // 清除是唯一會移除已上傳圖片的操作，先確認避免誤觸。
-        if (state.items.length &&
+      function clearAll(skipConfirm = false) {
+        // 清除全部會移除所有已上傳圖片，先確認避免誤觸（刪最後一張時已確認過）。
+        if (!skipConfirm && state.items.length &&
             !window.confirm(`確定要清除目前的 ${state.items.length} 張圖片嗎？此動作無法復原。`)) {
           return;
         }
@@ -2136,7 +2176,7 @@
       });
 
       els.downloadBtn.addEventListener("click", exportZip);
-      els.clearBtn.addEventListener("click", clearAll);
+      els.clearBtn.addEventListener("click", () => clearAll());
 
       // Zoom controls
       els.zoomIn.addEventListener("click", () => setZoom(state.zoom * 1.15));

@@ -12,6 +12,7 @@ A single-file, fully local image tool: merge multiple images, add padding, slice
 - Padding with custom background color
 - Grid slicing plus free vertical/horizontal lines you can drag
 - Auto-detect: finds blank bands (separators / whitespace) running across the image and places grid lines at their centers; adjustable minimum gap
+- Remove any single imported image with the "🗑 Delete" button on its thumbnail (asks for confirmation; grid lines reset because the merged canvas changes)
 - Click a grid line to select it, then delete it (✕ on the line, sidebar button, or Delete key) if you added one by mistake
 - Pixel magnifier while dragging a grid line (10×, shows the exact cut coordinate) for precise manual adjustment
 - Export JPG (quality + max width) or lossless PNG (optional original size) as ZIP
@@ -40,6 +41,7 @@ MIT
 - 四邊留白與自訂背景色
 - 網格切圖，並可自由新增、拖曳水平／垂直格線
 - 自動偵測：找出橫貫／縱貫整張圖的空白帶（分隔線、留白），在中央自動放格線；可調最小空白間距
+- 可刪除單張已匯入的圖片：縮圖上的「🗑 刪除這張」（會先確認；合併畫布改變，格線會重設）
 - 點選格線即可刪除（線上 ✕、側邊按鈕或 Delete 鍵），加錯線可立即移除
 - 拖曳格線時自動顯示像素級放大鏡（10 倍，並標示切點座標），手動調整更精準
 - 匯出 JPG（可調品質與最大寬度）或無損 PNG（可保留原尺寸）ZIP
