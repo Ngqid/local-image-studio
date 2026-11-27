@@ -837,6 +837,7 @@
         items: [],                    // { file, img, width, height, uploadIndex, thumbnail }
         sortMode: "filename",
         thumbDrag: null,
+        sizeWarning: "",              // 拼接尺寸超過瀏覽器上限時的提示（空字串＝正常）
         uploadCounter: 0,             // 單調遞增，作為「上傳順序」
         generation: 0,                // 清除全部時 +1，用來作廢尚在讀取中的圖片
         mergedCanvas: document.createElement("canvas"),
@@ -1217,7 +1218,8 @@
         els.mergeControls.classList.toggle("hidden", state.items.length <= 1);
         updateFilenameHint();
         // 不呼叫 fitToView：保留使用者目前的縮放比例與捲動位置。
-        setStatus(`已刪除「${name}」，剩 ${state.items.length} 張圖片；格線已重設。`, "ok");
+        if (state.sizeWarning) setStatus(`已刪除「${name}」，剩 ${state.items.length} 張圖片，但${state.sizeWarning}`, "warn");
+        else setStatus(`已刪除「${name}」，剩 ${state.items.length} 張圖片；格線已重設。`, "ok");
       }
 
       function clearThumbIndicators() {
@@ -1310,6 +1312,13 @@
         els.dropSub.textContent = has ? "新增的圖片會加入現有圖片，不會覆蓋" : "或點擊選擇多張圖片";
       }
 
+      // 上傳相關提示：同時顯示在上傳區旁（使用者看得到）與最下方的狀態列。
+      function notifyUpload(text, tone) {
+        setStatus(text, tone);
+        els.fileSummary.textContent = text;
+        els.fileSummary.classList.toggle("status-warn", tone === "warn");
+      }
+
       const fileKey = (f) => `${f.name}|${f.size}|${f.lastModified}`;
 
       // 新增圖片：永遠「加入」現有清單，不會取代已上傳的圖片。
@@ -1317,22 +1326,29 @@
         const files = [...fileList].filter(f => f.type.startsWith("image/"));
         els.fileInput.value = "";
         if (!files.length) {
-          setStatus("沒有偵測到可讀取的圖片檔。", "warn");
+          notifyUpload("沒有偵測到可讀取的圖片檔（請選擇 JPG、PNG、WebP 等圖片）。", "warn");
           return;
         }
 
-        // 略過與現有圖片完全相同（檔名＋大小＋修改時間）的檔案，避免誤按重複加入。
+        // 與現有圖片完全相同（檔名＋大小＋修改時間）的檔案視為重複，先詢問是否仍要再加入一份。
         const known = new Set(state.items.map(it => fileKey(it.file)));
         const fresh = [];
-        let duplicates = 0;
+        const dupFiles = [];
         for (const f of files) {
           const k = fileKey(f);
-          if (known.has(k)) { duplicates++; continue; }
+          if (known.has(k)) { dupFiles.push(f); continue; }
           known.add(k);
           fresh.push(f);
         }
+        let duplicates = dupFiles.length;
+        if (dupFiles.length &&
+            window.confirm(`有 ${dupFiles.length} 張圖片與已加入的圖片相同（同檔名、大小、修改時間）。\n\n` +
+              "按「確定」＝仍再加入一份；按「取消」＝略過重複的圖片。")) {
+          fresh.push(...dupFiles);
+          duplicates = 0;
+        }
         if (!fresh.length) {
-          setStatus(`這 ${duplicates} 張圖片已經上傳過，未重複新增。`, "warn");
+          notifyUpload(`這 ${duplicates} 張圖片已經加入過，已略過。若要再加入同一張圖，重新選取時按「確定」即可。`, "warn");
           return;
         }
 
@@ -1346,7 +1362,7 @@
           const loaded = results.filter(r => r.status === "fulfilled").map(r => r.value);
           const failed = results.length - loaded.length;
           if (!loaded.length) {
-            setStatus("圖片讀取失敗，請確認格式是否支援。已上傳的圖片不受影響。", "warn");
+            notifyUpload("圖片讀取失敗，請確認格式是否支援。已上傳的圖片不受影響。", "warn");
             return;
           }
 
@@ -1355,6 +1371,7 @@
 
           els.fileSummary.textContent =
             `目前共 ${state.items.length} 張圖片；可在預覽旁查看縮圖與調整拼接順序。`;
+          els.fileSummary.classList.remove("status-warn");
           els.mergeControls.classList.toggle("hidden", state.items.length <= 1);
           els.downloadBtn.disabled = false;
           els.autoDetectBtn.disabled = false;
@@ -1373,14 +1390,46 @@
           const notes = [];
           if (duplicates) notes.push(`略過 ${duplicates} 張重複`);
           if (failed) notes.push(`${failed} 張讀取失敗`);
-          setStatus(
-            `已新增 ${loaded.length} 張圖片，共 ${state.items.length} 張` +
-            (notes.length ? `（${notes.join("、")}）` : "") + "。",
-            failed ? "warn" : "ok");
+          if (state.sizeWarning) {
+            setStatus(`已新增 ${loaded.length} 張圖片，共 ${state.items.length} 張，但${state.sizeWarning}`, "warn");
+          } else {
+            setStatus(
+              `已新增 ${loaded.length} 張圖片，共 ${state.items.length} 張` +
+              (notes.length ? `（${notes.join("、")}）` : "") + "。",
+              failed ? "warn" : "ok");
+          }
         } catch (err) {
           console.error(err);
           if (gen === state.generation) setStatus("圖片讀取失敗，請確認格式是否支援。", "warn");
         }
+      }
+
+      // 以「實際能不能畫」判斷瀏覽器支援的畫布尺寸，不再寫死上限。
+      // 各瀏覽器上限不同（Chrome 單邊約 6.5 萬 px、Firefox 3.2 萬 px、Safari 較小），
+      // 因此在遠端角落畫一個點再讀回來，讀得到才算可用。結果快取，較小的尺寸不再重測。
+      const canvasProbe = { okW: 0, okH: 0, bad: [] };
+      const MAX_CANVAS_AREA = 400_000_000;   // 約 4 億像素，避免記憶體耗盡
+      function canvasFits(w, h) {
+        if (w <= 0 || h <= 0 || w * h > MAX_CANVAS_AREA) return false;
+        // 一般尺寸（各主流瀏覽器都支援）直接放行，不做偵測，避免防指紋等設定干擾讀回像素而誤判。
+        if (w <= 8192 && h <= 8192 && w * h <= 16_000_000) return true;
+        if (w <= canvasProbe.okW && h <= canvasProbe.okH) return true;
+        if (canvasProbe.bad.some(b => w >= b.w && h >= b.h)) return false;
+        let ok = false;
+        const t = document.createElement("canvas");
+        try {
+          t.width = w; t.height = h;
+          const g = t.getContext("2d");
+          if (g) {
+            g.fillStyle = "#000";
+            g.fillRect(w - 1, h - 1, 1, 1);
+            ok = g.getImageData(w - 1, h - 1, 1, 1).data[3] === 255;
+          }
+        } catch { ok = false; }
+        t.width = 1; t.height = 1;   // 立刻釋放測試用的記憶體
+        if (ok) { canvasProbe.okW = Math.max(canvasProbe.okW, w); canvasProbe.okH = Math.max(canvasProbe.okH, h); }
+        else canvasProbe.bad.push({ w, h });
+        return ok;
       }
 
       function rebuildMergedCanvas() {
@@ -1390,39 +1439,47 @@
         }
 
         const vertical = state.items.length === 1 || els.mergeMode.value === "vertical";
+        const sizes = getLayoutSizes();
         let width, height;
-
-        if (state.items.length === 1) {
-          width = state.items[0].width;
-          height = state.items[0].height;
-        } else if (vertical) {
-          width = Math.max(...state.items.map(x => x.width));
-          height = state.items.reduce((sum, x) => sum + x.height, 0);
+        if (vertical) {
+          width = Math.max(...sizes.map(z => z.w));
+          height = sizes.reduce((sum, z) => sum + z.h, 0);
         } else {
-          width = state.items.reduce((sum, x) => sum + x.width, 0);
-          height = Math.max(...state.items.map(x => x.height));
+          width = sizes.reduce((sum, z) => sum + z.w, 0);
+          height = Math.max(...sizes.map(z => z.h));
         }
+
+        const padNow = getPadding();
+        const totalW = Math.max(1, width) + padNow.left + padNow.right;
+        const totalH = Math.max(1, height) + padNow.top + padNow.bottom;
+        if (!canvasFits(totalW, totalH)) {
+          state.sizeWarning = `拼接後尺寸 ${totalW.toLocaleString()} × ${totalH.toLocaleString()} px 超過這個瀏覽器能處理的畫布上限，` +
+            "預覽未更新。請刪除部分圖片、減少留白，或改用 Chrome／Edge（支援較大尺寸）。";
+          els.canvasMeta.textContent = "尺寸超過瀏覽器上限，預覽未更新";
+          setStatus(state.sizeWarning, "warn");
+          return;
+        }
+        state.sizeWarning = "";
 
         const c = state.mergedCanvas;
         c.width = Math.max(1, width);
         c.height = Math.max(1, height);
         const cctx = c.getContext("2d");
         cctx.clearRect(0, 0, c.width, c.height);
+        cctx.imageSmoothingEnabled = true;
+        cctx.imageSmoothingQuality = "high";
 
         let offset = 0;
-        for (const item of state.items) {
-          if (state.items.length === 1) {
-            cctx.drawImage(item.img, 0, 0);
-          } else if (vertical) {
-            const x = Math.round((c.width - item.width) / 2);
-            cctx.drawImage(item.img, x, offset);
-            offset += item.height;
+        state.items.forEach((item, i) => {
+          const { w, h } = sizes[i];
+          if (vertical) {
+            cctx.drawImage(item.img, Math.round((c.width - w) / 2), offset, w, h);
+            offset += h;
           } else {
-            const y = Math.round((c.height - item.height) / 2);
-            cctx.drawImage(item.img, offset, y);
-            offset += item.width;
+            cctx.drawImage(item.img, offset, Math.round((c.height - h) / 2), w, h);
+            offset += w;
           }
-        }
+        });
 
         renderFinalCanvas();
       }
@@ -1434,9 +1491,10 @@
         const width = src.width + pad.left + pad.right;
         const height = src.height + pad.top + pad.bottom;
 
-        // 瀏覽器 canvas 有尺寸上限，先做保守防呆。
-        if (width <= 0 || height <= 0 || width > 32767 || height > 32767) {
-          setStatus("目前畫布尺寸過大，請減少留白或圖片尺寸。", "warn");
+        // 以實際可用的畫布尺寸防呆（見 canvasFits）。
+        if (!canvasFits(width, height)) {
+          setStatus(`最終畫布 ${width.toLocaleString()} × ${height.toLocaleString()} px 超過這個瀏覽器能處理的上限，` +
+            "請減少留白或圖片，或改用 Chrome／Edge。", "warn");
           return;
         }
 
@@ -1620,19 +1678,30 @@
         };
       }
 
+      // 各圖在拼接時的尺寸：垂直拼接以「最小寬度」為準、水平拼接以「最小高度」為準，
+      // 其他圖片等比縮放（只會縮小，不會放大），因此不會出現兩側多餘空白。單張圖維持原尺寸。
+      function getLayoutSizes() {
+        const items = state.items;
+        if (items.length <= 1) return items.map(it => ({ w: it.width, h: it.height }));
+        if (els.mergeMode.value === "vertical") {
+          const target = Math.min(...items.map(it => it.width));
+          return items.map(it => ({ w: target, h: Math.max(1, Math.round(it.height * target / it.width)) }));
+        }
+        const target = Math.min(...items.map(it => it.height));
+        return items.map(it => ({ w: Math.max(1, Math.round(it.width * target / it.height)), h: target }));
+      }
+
       // 每張圖片在最終畫布（含留白）中的位置與大小，規則與 rebuildMergedCanvas 相同。
       function getImageRects() {
         const pad = getPadding();
         const merged = state.mergedCanvas;
-        const single = state.items.length === 1;
-        const vertical = single || els.mergeMode.value === "vertical";
+        const vertical = state.items.length === 1 || els.mergeMode.value === "vertical";
         let offset = 0;
-        return state.items.map(item => {
+        return getLayoutSizes().map(({ w, h }) => {
           let x, y;
-          if (single) { x = 0; y = 0; }
-          else if (vertical) { x = Math.round((merged.width - item.width) / 2); y = offset; offset += item.height; }
-          else { x = offset; y = Math.round((merged.height - item.height) / 2); offset += item.width; }
-          return { x: pad.left + x, y: pad.top + y, w: item.width, h: item.height };
+          if (vertical) { x = Math.round((merged.width - w) / 2); y = offset; offset += h; }
+          else { x = offset; y = Math.round((merged.height - h) / 2); offset += w; }
+          return { x: pad.left + x, y: pad.top + y, w, h };
         });
       }
 
@@ -1701,7 +1770,7 @@
             btn.textContent = "✕";
             btn.title = `刪除這張圖片：${item.file.name}`;
             btn.setAttribute("aria-label", `刪除第 ${i + 1} 張圖片：${item.file.name}`);
-            btn.style.left = `${((x + item.width) / W) * 100}%`;
+            btn.style.left = `${((x + rects[i].w) / W) * 100}%`;
             btn.style.top = `${(y / H) * 100}%`;
             // 避免在新增格線模式或拖曳格線時被當成點在畫布上。
             btn.addEventListener("pointerdown", ev => ev.stopPropagation());
@@ -2129,6 +2198,7 @@
           return;
         }
         state.generation++;      // 作廢任何仍在讀取中的圖片
+        state.sizeWarning = "";
         state.uploadCounter = 0;
         state.items = [];
         state.sortMode = "filename";

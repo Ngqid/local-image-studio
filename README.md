@@ -12,6 +12,9 @@ A single-file, fully local image tool: merge multiple images, add padding, slice
 - Padding with custom background color
 - Grid slicing plus free vertical/horizontal lines you can drag
 - Auto-detect: finds blank bands (separators / whitespace) running across the image and places grid lines at their centers; adjustable minimum gap
+- Merging scales every image to the narrowest width (vertical) or shortest height (horizontal) proportionally, so there are no empty side margins
+- Canvas size limit is detected from the browser instead of a fixed 32,767 px cap (Chrome/Edge handle taller stacks; a clear warning appears if the limit is exceeded)
+- Adding a file identical to one already loaded asks whether to add another copy (OK) or skip it (Cancel); upload messages show right under the upload area
 - Click a thumbnail to jump the preview to that image (briefly highlighted)
 - Remove any single imported image with the "🗑 Delete" button on its thumbnail or the ✕ at the top-right corner of each image in the preview (asks for confirmation; grid lines reset because the merged canvas changes; zoom is kept)
 - Click a grid line to select it, then delete it (✕ on the line, sidebar button, or Delete key) if you added one by mistake
@@ -42,6 +45,9 @@ MIT
 - 四邊留白與自訂背景色
 - 網格切圖，並可自由新增、拖曳水平／垂直格線
 - 自動偵測：找出橫貫／縱貫整張圖的空白帶（分隔線、留白），在中央自動放格線；可調最小空白間距
+- 拼接時所有圖片以「最小寬度」（水平拼接則為最小高度）等比縮放，不會再有兩側多餘空白
+- 畫布尺寸上限改為依瀏覽器實際能力偵測，不再固定 32,767 px（Chrome／Edge 可處理更長的長圖，超過時會明確提示）
+- 加入與已載入檔案完全相同的圖片時，會詢問要再加入一份（確定）或略過（取消）；上傳提示直接顯示在上傳區下方
 - 點縮圖即可讓預覽跳到該圖片的位置（並短暫標示）
 - 可刪除單張已匯入的圖片：縮圖上的「🗑 刪除這張」，或預覽圖中每張圖片右上角的 ✕（會先確認；合併畫布改變，格線會重設；縮放比例維持不變）
 - 點選格線即可刪除（線上 ✕、側邊按鈕或 Delete 鍵），加錯線可立即移除
